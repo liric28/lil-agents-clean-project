@@ -1,0 +1,222 @@
+import Foundation
+
+// MARK: - Provider
+
+enum AgentProvider: String, CaseIterable {
+    case claude, claudeCode, codex, copilot, gemini, opencode
+
+    private static let defaultsKey = "selectedProvider"
+
+    static var current: AgentProvider {
+        get {
+            let raw = UserDefaults.standard.string(forKey: defaultsKey) ?? "claude"
+            return AgentProvider(rawValue: raw) ?? .claude
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: defaultsKey)
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .claude:     return "Claude"
+        case .claudeCode: return "Claude Code"
+        case .codex:    return "Codex"
+        case .copilot:  return "Copilot"
+        case .gemini:   return "Gemini"
+        case .opencode: return "OpenCode"
+        }
+    }
+
+    var inputPlaceholder: String {
+        "Ask \(displayName)..."
+    }
+
+    /// Returns provider name styled per theme format.
+    func titleString(format: TitleFormat) -> String {
+        switch format {
+        case .uppercase:      return displayName.uppercased()
+        case .lowercaseTilde: return displayName.lowercased()
+        case .capitalized:    return displayName
+        }
+    }
+
+    var binaryName: String {
+        switch self {
+        case .claude:     return "claude"
+        case .claudeCode: return "claude"
+        case .codex:    return "codex"
+        case .copilot:  return "copilot"
+        case .gemini:   return "gemini"
+        case .opencode: return "opencode"
+        }
+    }
+
+    /// Cache of provider availability, populated by `detectAvailableProviders`.
+    private(set) static var availability: [AgentProvider: Bool] = [:]
+
+    /// Scan PATH for all provider binaries and call completion when done.
+    static func detectAvailableProviders(completion: @escaping () -> Void) {
+        let all = AgentProvider.allCases
+        let group = DispatchGroup()
+        for provider in all {
+            group.enter()
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            ShellEnvironment.findBinary(name: provider.binaryName, fallbackPaths: [
+                "\(home)/.local/bin/\(provider.binaryName)",
+                "/usr/local/bin/\(provider.binaryName)",
+                "/opt/homebrew/bin/\(provider.binaryName)"
+            ]) { path in
+                availability[provider] = path != nil
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) {
+            completion()
+        }
+    }
+
+    var isAvailable: Bool {
+        AgentProvider.availability[self] ?? false
+    }
+
+    /// Returns the first available provider, or `.claude` as fallback.
+    static var firstAvailable: AgentProvider {
+        allCases.first(where: { $0.isAvailable }) ?? .claude
+    }
+
+    var installInstructions: String {
+        switch self {
+        case .claude:
+            return "To install, run this in Terminal:\n  curl -fsSL https://claude.ai/install.sh | sh\n\nOr download from https://claude.ai/download"
+        case .claudeCode:
+            return "To install, run this in Terminal:\n  curl -fsSL https://claude.ai/install.sh | sh\n\nOr download from https://claude.ai/download"
+        case .codex:
+            return "To install, run this in Terminal:\n  npm install -g @openai/codex"
+        case .copilot:
+            return "To install, run this in Terminal:\n  brew install copilot-cli\n\nOr: npm install -g @github/copilot-cli"
+        case .gemini:
+            return "To install, run this in Terminal:\n  npm install -g @google/gemini-cli\n\nThen authenticate:\n  gemini auth"
+        case .opencode:
+            return "To install, run this in Terminal:\n  curl -fsSL https://opencode.ai/install | bash"
+        }
+    }
+
+    func createSession() -> any AgentSession {
+        switch self {
+        case .claude:   return ClaudeSession()
+        case .claudeCode: return ClaudeCodeSession()
+        case .codex:    return CodexSession()
+        case .copilot:  return CopilotSession()
+        case .gemini:   return GeminiSession()
+        case .opencode: return OpenCodeSession()
+        }
+    }
+}
+
+// MARK: - Title Format
+
+enum TitleFormat {
+    case uppercase       // "CLAUDE"
+    case lowercaseTilde  // "claude ~"
+    case capitalized     // "Claude"
+}
+
+// MARK: - Message
+
+struct AgentMessage {
+    enum Role { case user, assistant, error, toolUse, toolResult }
+    let role: Role
+    let text: String
+}
+
+enum AgentPromptKind {
+    case approval
+    case ask
+
+    var defaultPrimaryActionTitle: String {
+        switch self {
+        case .approval:
+            return "Allow"
+        case .ask:
+            return "Send"
+        }
+    }
+
+    var defaultSecondaryActionTitle: String? {
+        switch self {
+        case .approval:
+            return "Deny"
+        case .ask:
+            return "Cancel"
+        }
+    }
+}
+
+struct AgentPrompt {
+    let id: String
+    let kind: AgentPromptKind
+    let title: String
+    let detail: String
+    let primaryActionTitle: String
+    let secondaryActionTitle: String?
+    let placeholder: String?
+    let prefilledValue: String
+    let options: [String]
+
+    init(
+        id: String = UUID().uuidString,
+        kind: AgentPromptKind,
+        title: String,
+        detail: String,
+        primaryActionTitle: String? = nil,
+        secondaryActionTitle: String? = nil,
+        placeholder: String? = nil,
+        prefilledValue: String = "",
+        options: [String] = []
+    ) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.detail = detail
+        self.primaryActionTitle = primaryActionTitle ?? kind.defaultPrimaryActionTitle
+        self.secondaryActionTitle = secondaryActionTitle ?? kind.defaultSecondaryActionTitle
+        self.placeholder = placeholder
+        self.prefilledValue = prefilledValue
+        self.options = options
+    }
+
+    var usesChoiceButtons: Bool {
+        !options.isEmpty
+    }
+
+    var requiresTextInput: Bool {
+        kind == .ask && options.isEmpty
+    }
+}
+
+enum AgentPromptResponse {
+    case primary(String?)
+    case secondary
+    case option(Int, String)
+}
+
+// MARK: - Session Protocol
+
+protocol AgentSession: AnyObject {
+    var isRunning: Bool { get }
+    var isBusy: Bool { get }
+    var history: [AgentMessage] { get set }
+
+    var onText: ((String) -> Void)? { get set }
+    var onError: ((String) -> Void)? { get set }
+    var onToolUse: ((String, [String: Any]) -> Void)? { get set }
+    var onToolResult: ((String, Bool) -> Void)? { get set }
+    var onSessionReady: (() -> Void)? { get set }
+    var onTurnComplete: (() -> Void)? { get set }
+    var onProcessExit: (() -> Void)? { get set }
+
+    func start()
+    func send(message: String)
+    func terminate()
+}
