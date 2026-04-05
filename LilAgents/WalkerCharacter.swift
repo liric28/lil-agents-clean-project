@@ -714,7 +714,7 @@ class WalkerCharacter {
         let charFrame = window.frame
         let popoverSize = popover.frame.size
         var x = charFrame.midX - popoverSize.width / 2
-        let y = charFrame.maxY + 15
+        let y = charFrame.maxY + 15 + 30 // 头顶对话框
 
         let screenFrame = screen.frame
         x = max(screenFrame.minX + 4, min(x, screenFrame.maxX - popoverSize.width - 4))
@@ -795,14 +795,17 @@ class WalkerCharacter {
             }
             if isIdleForPopover {
                 completionBubbleExpiry += 1.0 / 60.0
-                hideBubble()
-            } else {
-                showBubble(text: currentPhrase, isCompletion: true)
+//                hideBubble()
+//            } else {
+//                showBubble(text: currentPhrase, isCompletion: true)
             }
+            // 对话框显示时也显示气泡
+            showBubble(text: currentPhrase, isCompletion: true)
             return
         }
 
-        if isAgentBusy && !isIdleForPopover {
+//        if isAgentBusy && !isIdleForPopover {
+        if isAgentBusy {
             let oldPhrase = currentPhrase
             updateThinkingPhrase()
             if currentPhrase != oldPhrase && !oldPhrase.isEmpty && !phraseAnimating {
@@ -860,7 +863,7 @@ class WalkerCharacter {
 
         let charFrame = window.frame
         let x = charFrame.midX - bubbleW / 2
-        let y = charFrame.origin.y + charFrame.height * 0.88
+        let y = charFrame.origin.y + charFrame.height * 1.03 // 头顶气泡提示语
         thinkingBubbleWindow?.setFrame(CGRect(x: x, y: y, width: bubbleW, height: h), display: false)
 
         let borderColor = isCompletion ? t.bubbleCompletionBorder.cgColor : t.bubbleBorder.cgColor
