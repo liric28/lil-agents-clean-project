@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Provider
 
 enum AgentProvider: String, CaseIterable {
-    case claude, claudeCode, codex, copilot, gemini, opencode
+    case claude, codex, copilot, gemini, opencode
 
     private static let defaultsKey = "selectedProvider"
 
@@ -20,7 +20,6 @@ enum AgentProvider: String, CaseIterable {
     var displayName: String {
         switch self {
         case .claude:   return "Claude"
-        case .claudeCode: return "Claude Code"
         case .codex:    return "Codex"
         case .copilot:  return "Copilot"
         case .gemini:   return "Gemini"
@@ -44,7 +43,6 @@ enum AgentProvider: String, CaseIterable {
     var binaryName: String {
         switch self {
         case .claude:   return "claude"
-        case .claudeCode: return "claude"
         case .codex:    return "codex"
         case .copilot:  return "copilot"
         case .gemini:   return "gemini"
@@ -89,8 +87,6 @@ enum AgentProvider: String, CaseIterable {
         switch self {
         case .claude:
             return "To install, run this in Terminal:\n  curl -fsSL https://claude.ai/install.sh | sh\n\nOr download from https://claude.ai/download"
-        case .claudeCode:
-            return "To install, run this in Terminal:\n  curl -fsSL https://claude.ai/install.sh | sh\n\nOr download from https://claude.ai/download"
         case .codex:
             return "To install, run this in Terminal:\n  npm install -g @openai/codex"
         case .copilot:
@@ -104,8 +100,7 @@ enum AgentProvider: String, CaseIterable {
 
     func createSession() -> any AgentSession {
         switch self {
-        case .claude:   return ClaudeSession()
-        case .claudeCode: return ClaudeCodeSession()
+        case .claude:   return ClaudeCodeSession()
         case .codex:    return CodexSession()
         case .copilot:  return CopilotSession()
         case .gemini:   return GeminiSession()

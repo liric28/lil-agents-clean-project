@@ -528,7 +528,9 @@ class WalkerCharacter {
         titleBar.layer?.mask = titleMask
         container.addSubview(titleBar)
 
-        let titleLabel = NSTextField(labelWithString: t.titleString(for: provider))
+        let titleString = t.titleString(for: provider)
+        let capitalizedTitle = titleString.prefix(1).uppercased() + titleString.dropFirst().lowercased()
+        let titleLabel = NSTextField(labelWithString: capitalizedTitle)
         titleLabel.font = t.titleFont
         titleLabel.textColor = t.titleText
         titleLabel.sizeToFit()
@@ -584,6 +586,7 @@ class WalkerCharacter {
         terminal.provider = provider
         terminal.autoresizingMask = [.width, .height]
         terminal.onSendMessage = { [weak self] message in
+            self?.terminalView?.status = .working
             self?.session?.send(message: message)
         }
         terminal.onClearRequested = { [weak self] in
@@ -620,12 +623,14 @@ class WalkerCharacter {
 
         session.onTurnComplete = { [weak self] in
             self?.terminalView?.endStreaming()
+            self?.terminalView?.status = .ready
             self?.playCompletionSound()
             self?.showCompletionBubble()
         }
 
         session.onError = { [weak self] text in
             self?.terminalView?.appendError(text)
+            self?.terminalView?.status = .error
         }
 
         session.onToolUse = { [weak self] toolName, input in
@@ -641,6 +646,7 @@ class WalkerCharacter {
         session.onProcessExit = { [weak self] in
             guard let self = self else { return }
             self.terminalView?.endStreaming()
+            self.terminalView?.status = .ready
             self.terminalView?.appendError("\(self.provider.displayName) session ended.")
         }
 
@@ -708,7 +714,7 @@ class WalkerCharacter {
         let charFrame = window.frame
         let popoverSize = popover.frame.size
         var x = charFrame.midX - popoverSize.width / 2
-        let y = charFrame.maxY - 15
+        let y = charFrame.maxY + 15
 
         let screenFrame = screen.frame
         x = max(screenFrame.minX + 4, min(x, screenFrame.maxX - popoverSize.width - 4))

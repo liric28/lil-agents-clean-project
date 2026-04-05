@@ -29,7 +29,7 @@ class PaddedTextFieldCell: NSTextFieldCell {
             textObj.textColor = color
         }
         if let tv = textObj as? NSTextView {
-            tv.insertionPointColor = NSColor.systemPink
+            tv.insertionPointColor = textColor ?? .textColor
             tv.drawsBackground = false
             tv.backgroundColor = .clear
         }
@@ -46,38 +46,31 @@ class PaddedTextFieldCell: NSTextFieldCell {
         super.select(withFrame: rect.insetBy(dx: inset.width, dy: inset.height), in: controlView, editor: textObj, delegate: delegate, start: selStart, length: selLength)
     }
 
-    private lazy var customFieldEditor: InputFieldEditor = {
-        let editor = InputFieldEditor(frame: .zero)
-        editor.drawsBackground = false
-        editor.backgroundColor = .clear
-        editor.isRichText = false
-        editor.importsGraphics = false
-        editor.isEditable = true
-        editor.isSelectable = true
-        return editor
-    }()
-
-    override func fieldEditor(for controlView: NSView) -> NSTextView? {
-        return customFieldEditor
-    }
+//    private lazy var customFieldEditor: InputFieldEditor = {
+//        let editor = InputFieldEditor(frame: .zero)
+//        editor.drawsBackground = false
+//        editor.backgroundColor = .clear
+//        editor.isRichText = false
+//        editor.importsGraphics = false
+//        editor.isEditable = true
+//        editor.isSelectable = true
+//        return editor
+//    }()
+//
+//    override func fieldEditor(for controlView: NSView) -> NSTextView? {
+//        return customFieldEditor
+//    }
 }
 
 private class InputFieldEditor: NSTextView {
-    override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        let cleanedText: Any
+    var onReturnKey: (() -> Void)?
 
-        if let attributed = string as? NSAttributedString {
-            let mutable = NSMutableAttributedString(attributedString: attributed)
-            let fullRange = NSRange(location: 0, length: mutable.length)
-            mutable.removeAttribute(.underlineStyle, range: fullRange)
-            mutable.removeAttribute(.underlineColor, range: fullRange)
-            mutable.removeAttribute(.backgroundColor, range: fullRange)
-            cleanedText = mutable
-        } else {
-            cleanedText = string
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 36 { // Return key
+            onReturnKey?()
+            return true
         }
-
-        super.setMarkedText(cleanedText, selectedRange: selectedRange, replacementRange: replacementRange)
+        return super.performKeyEquivalent(with: event)
     }
 }
 
@@ -91,6 +84,161 @@ class TerminalView: NSView {
         didSet {
             updatePlaceholder()
         }
+    }
+
+    // MARK: - Status Indicator
+    enum Status {
+        case ready
+        case thinking
+        case working
+        case error
+    }
+
+    private let statusContainer = NSView()
+    private let statusDot = NSView()
+    private let statusLabel = NSTextField()
+    private var currentStatus: Status = .ready
+
+    var status: Status = .ready {
+        didSet {
+            updateStatusDisplay()
+        }
+    }
+
+    // MARK: - Shimmer Animation
+    private var shimmerLayer: CAGradientLayer?
+    private var shimmerAnimation: CABasicAnimation?
+
+    private func startShimmerAnimation() {
+        stopShimmerAnimation()
+
+        let gradient = CAGradientLayer()
+        gradient.frame = statusContainer.bounds
+        gradient.colors = [
+            NSColor.clear.cgColor,
+            NSColor.white.withAlphaComponent(0.2).cgColor,
+            NSColor.clear.cgColor
+        ]
+        gradient.locations = [0, 0.5, 1]
+        gradient.startPoint = CGPoint(x: 0, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        statusContainer.layer?.addSublayer(gradient)
+        shimmerLayer = gradient
+
+        let anim = CABasicAnimation(keyPath: "locations")
+        anim.fromValue = [-1.0, -0.5, 0.0]
+        anim.toValue = [1.0, 1.5, 2.0]
+        anim.duration = 2.0
+        anim.repeatCount = .infinity
+        gradient.add(anim, forKey: "shimmer")
+        shimmerAnimation = anim
+    }
+
+    private func stopShimmerAnimation() {
+        shimmerLayer?.removeAllAnimations()
+        shimmerLayer?.removeFromSuperlayer()
+        shimmerLayer = nil
+        shimmerAnimation = nil
+    }
+
+    private func updateShimmerFrame() {
+        shimmerLayer?.frame = statusContainer.bounds
+    }
+
+    private func setupStatusIndicator() {
+        let t = theme
+
+        // Container - semi-transparent rounded bar
+        statusContainer.wantsLayer = true
+        statusContainer.layer?.backgroundColor = NSColor(white: 0, alpha: 0.15).cgColor
+        statusContainer.layer?.cornerRadius = 10
+
+        // Dot
+        statusDot.wantsLayer = true
+        statusDot.layer?.cornerRadius = 4
+        updateStatusDotColor()
+
+        // Label
+        statusLabel.isEditable = false
+        statusLabel.isBordered = false
+        statusLabel.backgroundColor = .clear
+        statusLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
+        statusLabel.textColor = .white
+        statusLabel.stringValue = "Ready"
+        statusLabel.alignment = .left
+        statusLabel.lineBreakMode = .byClipping
+        statusLabel.cell?.wraps = false
+        statusLabel.cell?.isScrollable = true
+
+        statusContainer.addSubview(statusDot)
+        statusContainer.addSubview(statusLabel)
+        addSubview(statusContainer)
+    }
+
+    private func updateStatusDotColor() {
+        switch currentStatus {
+        case .ready:
+            statusDot.layer?.backgroundColor = NSColor(red: 166/255, green: 227/255, blue: 161/255, alpha: 1).cgColor
+        case .thinking:
+            statusDot.layer?.backgroundColor = NSColor(red: 137/255, green: 180/255, blue: 250/255, alpha: 1).cgColor
+        case .working:
+            statusDot.layer?.backgroundColor = NSColor(red: 137/255, green: 180/255, blue: 250/255, alpha: 1).cgColor
+        case .error:
+            statusDot.layer?.backgroundColor = NSColor(red: 243/255, green: 139/255, blue: 168/255, alpha: 1).cgColor
+        }
+    }
+
+    private func updateStatusDisplay() {
+        currentStatus = status
+        updateStatusDotColor()
+        switch status {
+        case .ready:
+            statusLabel.stringValue = "Ready"
+            stopShimmerAnimation()
+        case .thinking:
+            statusLabel.stringValue = "Thinking"
+            startShimmerAnimation()
+        case .working:
+            statusLabel.stringValue = "Working"
+            startShimmerAnimation()
+        case .error:
+            statusLabel.stringValue = "Error"
+            stopShimmerAnimation()
+        }
+    }
+
+    private func layoutStatusIndicator(inputHeight: CGFloat, padding: CGFloat) {
+        let statusHeight: CGFloat = 20
+        let statusY: CGFloat = inputHeight + 10
+
+        // Get text size with a larger width
+        let textSize = statusLabel.sizeThatFits(NSSize(width: 1000, height: 16))
+        let dotSize: CGFloat = 8
+        let spacing: CGFloat = 6
+        let sidePadding: CGFloat = 16
+
+        // Container just fits content with padding
+        statusContainer.frame = NSRect(
+            x: padding, y: statusY,
+            width: dotSize + spacing + textSize.width + sidePadding * 2 + 10, height: statusHeight
+        )
+
+        // Remove existing constraints
+        statusDot.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            // Dot centered vertically and at leading position
+            statusDot.centerYAnchor.constraint(equalTo: statusContainer.centerYAnchor),
+            statusDot.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor, constant: sidePadding),
+            statusDot.widthAnchor.constraint(equalToConstant: dotSize),
+            statusDot.heightAnchor.constraint(equalToConstant: dotSize),
+
+            // Text centered vertically after dot
+            statusLabel.centerYAnchor.constraint(equalTo: statusContainer.centerYAnchor),
+            statusLabel.leadingAnchor.constraint(equalTo: statusDot.trailingAnchor, constant: spacing),
+            statusLabel.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor, constant: -sidePadding)
+        ])
     }
 
     private var currentAssistantText = ""
@@ -121,9 +269,10 @@ class TerminalView: NSView {
 
     private func updatePlaceholder() {
         let t = theme
+        let placeholderFont = NSFont.systemFont(ofSize: t.font.pointSize - 2, weight: t.font.fontDescriptor.symbolicTraits.contains(.bold) ? .semibold : .regular)
         inputField.placeholderAttributedString = NSAttributedString(
             string: provider.inputPlaceholder,
-            attributes: [.font: t.font, .foregroundColor: t.textDim]
+            attributes: [.font: placeholderFont, .foregroundColor: t.textDim]
         )
     }
 
@@ -133,9 +282,9 @@ class TerminalView: NSView {
         let padding: CGFloat = 10
 
         scrollView.frame = NSRect(
-            x: padding, y: inputHeight + padding + 6,
+            x: padding, y: inputHeight + padding + 26,
             width: frame.width - padding * 2,
-            height: frame.height - inputHeight - padding - 10
+            height: frame.height - inputHeight - padding - 30
         )
         scrollView.autoresizingMask = [.width, .height]
         scrollView.hasVerticalScroller = true
@@ -178,7 +327,7 @@ class TerminalView: NSView {
         let paddedCell = PaddedTextFieldCell(textCell: "")
         paddedCell.isEditable = true
         paddedCell.isScrollable = true
-        paddedCell.font = t.font
+        paddedCell.font = t.titleFont
         paddedCell.textColor = t.textPrimary
         paddedCell.drawsBackground = false
         paddedCell.isBezeled = false
@@ -189,6 +338,31 @@ class TerminalView: NSView {
         inputField.target = self
         inputField.action = #selector(inputSubmitted)
         addSubview(inputField)
+
+        setupStatusIndicator()
+        layoutStatusIndicator(inputHeight: inputHeight, padding: padding)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        let t = theme
+        let inputHeight: CGFloat = 30
+        let padding: CGFloat = 10
+
+        scrollView.frame = NSRect(
+            x: padding, y: inputHeight + padding + 26,
+            width: newSize.width - padding * 2,
+            height: newSize.height - inputHeight - padding - 30
+        )
+
+        inputField.frame = NSRect(
+            x: padding, y: 6,
+            width: newSize.width - padding * 2,
+            height: inputHeight
+        )
+
+        layoutStatusIndicator(inputHeight: inputHeight, padding: padding)
+        updateShimmerFrame()
     }
 
     func resetState() {
