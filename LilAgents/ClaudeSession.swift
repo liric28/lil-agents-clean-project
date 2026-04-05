@@ -1,9 +1,6 @@
 import Foundation
 
 class ClaudeSession: AgentSession {
-    private static let defaultProxyBaseURL = "http://127.0.0.1:8082"
-    private static let proxyEnvFilePath = "/Users/lipan/free-claude-code/.env"
-
     private var process: Process?
     private var inputPipe: Pipe?
     private var outputPipe: Pipe?
@@ -62,7 +59,7 @@ class ClaudeSession: AgentSession {
             "--dangerously-skip-permissions"
         ]
         proc.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
-        proc.environment = Self.claudeProcessEnvironment()
+        proc.environment = ShellEnvironment.processEnvironment()
 
         let inPipe = Pipe()
         let outPipe = Pipe()
@@ -267,53 +264,5 @@ class ClaudeSession: AgentSession {
             if let desc = input["description"] as? String { return desc }
             return input.keys.sorted().prefix(3).joined(separator: ", ")
         }
-    }
-
-    private static func claudeProcessEnvironment() -> [String: String] {
-        var env = ShellEnvironment.processEnvironment()
-
-        // App 直接起 claude 二进制，拿不到 ~/.zshrc 里的 shell function 包装，
-        // 所以这里内置一份和 claude-proxy-default 一致的代理注入逻辑。
-        let currentBaseURL = env["ANTHROPIC_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if currentBaseURL.isEmpty {
-            env["ANTHROPIC_BASE_URL"] = defaultProxyBaseURL
-        }
-
-        let currentToken = env["ANTHROPIC_AUTH_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if currentToken.isEmpty,
-           let proxyToken = readProxyEnvValue("ANTHROPIC_AUTH_TOKEN"),
-           !proxyToken.isEmpty {
-            env["ANTHROPIC_AUTH_TOKEN"] = proxyToken
-        }
-
-        return env
-    }
-
-    private static func readProxyEnvValue(_ key: String) -> String? {
-        guard let envText = try? String(contentsOfFile: proxyEnvFilePath, encoding: .utf8) else {
-            return nil
-        }
-
-        for rawLine in envText.components(separatedBy: .newlines).reversed() {
-            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !line.isEmpty, !line.hasPrefix("#"), let equalIndex = line.firstIndex(of: "=") else {
-                continue
-            }
-
-            let candidateKey = String(line[..<equalIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard candidateKey == key else { continue }
-
-            var value = String(line[line.index(after: equalIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
-                value.removeFirst()
-                value.removeLast()
-            } else if value.hasPrefix("'"), value.hasSuffix("'"), value.count >= 2 {
-                value.removeFirst()
-                value.removeLast()
-            }
-            return value
-        }
-
-        return nil
     }
 }

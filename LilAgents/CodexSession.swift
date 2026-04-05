@@ -5,13 +5,9 @@ class CodexSession: AgentSession {
     private var outputPipe: Pipe?
     private var errorPipe: Pipe?
     private var lineBuffer = ""
-    private var errorLineBuffer = ""
     private(set) var isRunning = false
     private(set) var isBusy = false
     private static var binaryPath: String?
-    private static let ignoredStandardErrorSnippets = [
-        "Reading additional input from stdin..."
-    ]
 
     var onText: ((String) -> Void)?
     var onError: ((String) -> Void)?
@@ -56,7 +52,6 @@ class CodexSession: AgentSession {
         isBusy = true
         history.append(AgentMessage(role: .user, text: message))
         lineBuffer = ""
-        errorLineBuffer = ""
 
         // Current Codex CLI: only `codex exec [OPTIONS] <PROMPT>` (resume/--last removed).
         let prompt = Self.execPrompt(priorMessages: history.dropLast(), latestUserMessage: message)
@@ -85,10 +80,6 @@ class CodexSession: AgentSession {
                     self.parseLine(self.lineBuffer)
                     self.lineBuffer = ""
                 }
-                if !self.errorLineBuffer.isEmpty {
-                    self.handleErrorLine(self.errorLineBuffer)
-                    self.errorLineBuffer = ""
-                }
                 if self.isBusy {
                     self.isBusy = false
                     self.onTurnComplete?()
@@ -111,7 +102,7 @@ class CodexSession: AgentSession {
             guard !data.isEmpty else { return }
             if let text = String(data: data, encoding: .utf8) {
                 DispatchQueue.main.async {
-                    self?.processErrorOutput(text)
+                    self?.onError?(text)
                 }
             }
         }
@@ -179,25 +170,6 @@ class CodexSession: AgentSession {
                 parseLine(line)
             }
         }
-    }
-
-    private func processErrorOutput(_ text: String) {
-        errorLineBuffer += text
-        while let newlineRange = errorLineBuffer.range(of: "\n") {
-            let line = String(errorLineBuffer[errorLineBuffer.startIndex..<newlineRange.lowerBound])
-            errorLineBuffer = String(errorLineBuffer[newlineRange.upperBound...])
-            handleErrorLine(line)
-        }
-    }
-
-    private func handleErrorLine(_ line: String) {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        // Codex CLI 会把这条 stdin 提示写到 stderr，但它不是实际错误，不应该污染聊天区。
-        if Self.ignoredStandardErrorSnippets.contains(where: { trimmed.contains($0) }) {
-            return
-        }
-        onError?(trimmed)
     }
 
     private func parseLine(_ line: String) {

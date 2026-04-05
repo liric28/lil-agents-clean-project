@@ -1,6 +1,5 @@
-import ImageIO
+import AVFoundation
 import AppKit
-import QuartzCore
 
 enum CharacterSize: String, CaseIterable {
     case large, medium, small
@@ -21,16 +20,8 @@ enum CharacterSize: String, CaseIterable {
 }
 
 class WalkerCharacter {
-    private enum PopoverMode {
-        case disabled
-        case shellOnly
-        case full
-    }
-
     let videoName: String
     let name: String
-    var idleImageName: String { "\(videoName)-idle" }
-    var spriteFramesDirectoryName: String { "\(videoName)-frames" }
     var provider: AgentProvider {
         get {
             let raw = UserDefaults.standard.string(forKey: "\(name)Provider") ?? "claude"
@@ -51,11 +42,9 @@ class WalkerCharacter {
         }
     }
     var window: NSWindow!
-    var spriteLayer: CALayer!
-    var idleLayer: CALayer!
-    var spriteFrameURLs: [URL] = []
-    var loadedSpriteFrames: [CGImage]?
-    let spriteFrameRate: Double = 18.0
+    var playerLayer: AVPlayerLayer!
+    var queuePlayer: AVQueuePlayer!
+    var looper: AVPlayerLooper!
 
     let videoWidth: CGFloat = 1080
     let videoHeight: CGFloat = 1920
@@ -103,30 +92,17 @@ class WalkerCharacter {
     var themeOverride: PopoverTheme?
     var isAgentBusy: Bool { session?.isBusy ?? false }
     var thinkingBubbleWindow: NSWindow?
-    var statusBadgeView: NSView?
-    var statusDotView: NSView?
-    var statusLabel: NSTextField?
-    var statusSweepLayer: CAGradientLayer?
-    private var sessionStatus: IslandBarStatus = .ready
     private(set) var isManuallyVisible = true
     private var environmentHiddenAt: CFTimeInterval?
     private var wasPopoverVisibleBeforeEnvironmentHide = false
     private var wasBubbleVisibleBeforeEnvironmentHide = false
-    private var isPrewarmingSpriteFrames = false
-    private var latestTaskSummary = ""
-    private var activePrompt: AgentPrompt?
-    private var activePromptResponder: ((AgentPromptResponse) -> Void)?
+
+    // Pointer tracking for dragging
     private var pointerDownScreenPoint: NSPoint?
     private var pointerDownWindowOrigin: NSPoint?
     private var isDraggingCharacter = false
     private var manualWindowOrigin: NSPoint?
     private let dragThreshold: CGFloat = 6
-    // 先恢复完整弹框，灵动岛另行禁用；仍保留“不自动抢键窗/输入框焦点”的安全策略。
-    private let popoverMode: PopoverMode = .full
-
-    private var islandTaskID: String {
-        "character.\(name)"
-    }
 
     init(videoName: String, name: String) {
         self.videoName = videoName
@@ -149,8 +125,7 @@ class WalkerCharacter {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             window.setFrame(newFrame, display: true)
-            self.spriteLayer.frame = CGRect(x: 0, y: 0, width: newWidth, height: newHeight)
-            self.idleLayer.frame = CGRect(x: 0, y: 0, width: newWidth, height: newHeight)
+            self.playerLayer.frame = CGRect(x: 0, y: 0, width: newWidth, height: newHeight)
             if let hostView = window.contentView {
                 hostView.frame = CGRect(x: 0, y: 0, width: newWidth, height: newHeight)
             }
@@ -161,46 +136,34 @@ class WalkerCharacter {
     }
 
     func setup() {
-        guard let idleImageURL = Bundle.main.url(forResource: idleImageName, withExtension: "png"),
-              let idleImage = NSImage(contentsOf: idleImageURL),
-              let idleCGImage = idleImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            print("Idle image \(idleImageName) not found")
+        guard let videoURL = Bundle.main.url(forResource: videoName, withExtension: "mov") else {
+            print("Video \(videoName) not found")
             return
         }
-        guard let spriteDirectoryURL = Bundle.main.url(forResource: spriteFramesDirectoryName, withExtension: nil),
-              let spriteURLs = try? FileManager.default.contentsOfDirectory(
-                at: spriteDirectoryURL,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
-              )
-              .filter({ $0.pathExtension.lowercased() == "png" })
-              .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }),
-              !spriteURLs.isEmpty else {
-            print("Sprite frames \(spriteFramesDirectoryName) not found")
-            return
-        }
-        spriteFrameURLs = spriteURLs
 
-        spriteLayer = CALayer()
-        spriteLayer.contentsGravity = .resizeAspect
-        spriteLayer.frame = CGRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
-        spriteLayer.isOpaque = false
-        if let firstFrame = loadCGImage(at: spriteURLs[0]) {
-            spriteLayer.contents = firstFrame
-        }
+        let asset = AVAsset(url: videoURL)
+        queuePlayer = AVQueuePlayer()
+        looper = AVPlayerLooper(player: queuePlayer, templateItem: AVPlayerItem(asset: asset))
 
-        idleLayer = CALayer()
-        idleLayer.contents = idleCGImage
-        idleLayer.contentsGravity = .resizeAspect
-        idleLayer.frame = CGRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
-        idleLayer.isOpaque = false
+        playerLayer = AVPlayerLayer(player: queuePlayer)
+        playerLayer.videoGravity = .resizeAspect
+        playerLayer.backgroundColor = NSColor.clear.cgColor
+        playerLayer.frame = CGRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
 
         let screen = NSScreen.main!
         let dockTopY = screen.visibleFrame.origin.y
-        let bottomPadding = displayHeight * 0.15
-        let y = dockTopY - bottomPadding + yOffset
 
-        let contentRect = CGRect(x: 0, y: y, width: displayWidth, height: displayHeight)
+        // Window bottom = dockTopY exactly — transparent area starts at dock top,
+        // so dock icons at y=0..dockTopY are never covered.
+        // Window height is chosen so the sprite (top portion of video) fits above the dock.
+        let windowBottomY = dockTopY
+        let windowContentHeight: CGFloat
+        switch size {
+        case .large:  windowContentHeight = 170   // sprite top ~y=207, bottom ~y=37
+        case .medium: windowContentHeight = 130   // sprite top ~y=167, bottom ~y=37
+        case .small:  windowContentHeight = 85    // sprite top ~y=122, bottom ~y=37
+        }
+        let contentRect = CGRect(x: 0, y: windowBottomY + yOffset, width: displayWidth, height: windowContentHeight)
         window = NSWindow(
             contentRect: contentRect,
             styleMask: .borderless,
@@ -218,75 +181,10 @@ class WalkerCharacter {
         hostView.character = self
         hostView.wantsLayer = true
         hostView.layer?.backgroundColor = NSColor.clear.cgColor
-        hostView.layer?.addSublayer(idleLayer)
-        hostView.layer?.addSublayer(spriteLayer)
+        hostView.layer?.addSublayer(playerLayer)
 
         window.contentView = hostView
         window.orderFrontRegardless()
-        showIdlePresentation(releaseVideo: true)
-        prewarmSpriteFrames()
-    }
-
-    func loadCGImage(at url: URL) -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
-    }
-
-    func prepareSpriteFramesIfNeeded() {
-        guard loadedSpriteFrames == nil else { return }
-        let frames = spriteFrameURLs.compactMap { loadCGImage(at: $0) }
-        loadedSpriteFrames = frames.isEmpty ? nil : frames
-        if let firstFrame = loadedSpriteFrames?.first {
-            spriteLayer.contents = firstFrame
-        }
-    }
-
-    func releaseSpriteFrames() {
-        loadedSpriteFrames = nil
-    }
-
-    func prewarmSpriteFrames() {
-        guard loadedSpriteFrames == nil, !isPrewarmingSpriteFrames else { return }
-        isPrewarmingSpriteFrames = true
-        let frameURLs = spriteFrameURLs
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let frames = frameURLs.compactMap { self?.loadCGImage(at: $0) }
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.isPrewarmingSpriteFrames = false
-                guard self.loadedSpriteFrames == nil, !frames.isEmpty else { return }
-                self.loadedSpriteFrames = frames
-                if let firstFrame = frames.first {
-                    self.spriteLayer.contents = firstFrame
-                }
-            }
-        }
-    }
-
-    func showIdlePresentation(releaseVideo: Bool) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        idleLayer.isHidden = false
-        spriteLayer.isHidden = true
-        CATransaction.commit()
-        if releaseVideo { prewarmSpriteFrames() }
-    }
-
-    func showVideoPresentation() {
-        prepareSpriteFramesIfNeeded()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        idleLayer.isHidden = true
-        spriteLayer.isHidden = false
-        CATransaction.commit()
-    }
-
-    func updateSpriteFrame(for videoTime: CFTimeInterval) {
-        guard let frames = loadedSpriteFrames, !frames.isEmpty else { return }
-        let clampedTime = max(0, min(videoTime, videoDuration))
-        let rawIndex = Int(floor(clampedTime * spriteFrameRate))
-        let index = min(max(rawIndex, 0), frames.count - 1)
-        spriteLayer.contents = frames[index]
     }
 
     // MARK: - Visibility
@@ -298,7 +196,7 @@ class WalkerCharacter {
                 window.orderFrontRegardless()
             }
         } else {
-            showIdlePresentation(releaseVideo: true)
+            queuePlayer.pause()
             window.orderOut(nil)
             popoverWindow?.orderOut(nil)
             thinkingBubbleWindow?.orderOut(nil)
@@ -312,7 +210,7 @@ class WalkerCharacter {
         wasPopoverVisibleBeforeEnvironmentHide = popoverWindow?.isVisible ?? false
         wasBubbleVisibleBeforeEnvironmentHide = thinkingBubbleWindow?.isVisible ?? false
 
-        showIdlePresentation(releaseVideo: true)
+        queuePlayer.pause()
         window.orderOut(nil)
         popoverWindow?.orderOut(nil)
         thinkingBubbleWindow?.orderOut(nil)
@@ -332,15 +230,16 @@ class WalkerCharacter {
 
         window.orderFrontRegardless()
         if isWalking {
-            showVideoPresentation()
-            updateSpriteFrame(for: 0)
-        } else {
-            showIdlePresentation(releaseVideo: false)
+            queuePlayer.play()
         }
 
         if isIdleForPopover && wasPopoverVisibleBeforeEnvironmentHide {
             updatePopoverPosition()
-            focusPopoverWindow()
+            popoverWindow?.orderFrontRegardless()
+            popoverWindow?.makeKey()
+            if let terminal = terminalView {
+                popoverWindow?.makeFirstResponder(terminal.inputField)
+            }
         }
 
         if wasBubbleVisibleBeforeEnvironmentHide {
@@ -371,12 +270,18 @@ class WalkerCharacter {
             isDraggingCharacter = true
             isWalking = false
             isPaused = true
-            showIdlePresentation(releaseVideo: true)
+            queuePlayer.pause()
         }
 
         let targetOrigin = NSPoint(x: startOrigin.x + deltaX, y: startOrigin.y)
-        manualWindowOrigin = clampedCharacterOrigin(for: targetOrigin)
-        applyManualWindowOrigin()
+        // 拖动时保持原来的Y坐标不变，只限制X
+        let currentScreen = window.screen ?? NSScreen.main ?? NSScreen.screens.first!
+        let visibleFrame = currentScreen.visibleFrame.insetBy(dx: 6, dy: 6)
+        let maxX = visibleFrame.maxX - displayWidth
+        let clampedX = max(visibleFrame.minX, min(targetOrigin.x, maxX))
+        // 保持窗口原来的Y坐标
+        manualWindowOrigin = NSPoint(x: clampedX, y: startOrigin.y)
+        applyManualWindowOrigin(NSPoint(x: clampedX, y: startOrigin.y))
     }
 
     func endPointerTracking(at screenPoint: NSPoint) -> Bool {
@@ -401,12 +306,6 @@ class WalkerCharacter {
     }
 
     func handleClick() {
-        if popoverMode == .disabled {
-            if isIdleForPopover {
-                closePopover()
-            }
-            return
-        }
         if isOnboarding {
             openOnboardingPopover()
             return
@@ -425,7 +324,8 @@ class WalkerCharacter {
         isIdleForPopover = true
         isWalking = false
         isPaused = true
-        showIdlePresentation(releaseVideo: true)
+        queuePlayer.pause()
+        queuePlayer.seek(to: .zero)
 
         if popoverWindow == nil {
             createPopoverWindow()
@@ -469,12 +369,11 @@ class WalkerCharacter {
         isOnboarding = false
         isPaused = true
         pauseEndTime = CACurrentMediaTime() + Double.random(in: 1.0...3.0)
-        showIdlePresentation(releaseVideo: true)
+        queuePlayer.seek(to: .zero)
         controller?.completeOnboarding()
     }
 
     func openPopover() {
-        guard popoverMode != .disabled else { return }
         // Close any other open popover
         if let siblings = controller?.characters {
             for sibling in siblings where sibling !== self && sibling.isIdleForPopover {
@@ -485,13 +384,14 @@ class WalkerCharacter {
         isIdleForPopover = true
         isWalking = false
         isPaused = true
-        showIdlePresentation(releaseVideo: true)
+        queuePlayer.pause()
+        queuePlayer.seek(to: .zero)
 
         // Always clear any bubble (thinking or completion) when popover opens
         showingCompletion = false
         hideBubble()
 
-        if popoverMode == .full, session == nil {
+        if session == nil {
             let newSession = provider.createSession()
             session = newSession
             wireSession(newSession)
@@ -502,16 +402,17 @@ class WalkerCharacter {
             createPopoverWindow()
         }
 
-        if popoverMode == .full, let terminal = terminalView, let session = session, !session.history.isEmpty {
+        if let terminal = terminalView, let session = session, !session.history.isEmpty {
             terminal.replayHistory(session.history)
         }
 
-        if popoverMode == .full {
-            terminalView?.applyPrompt(activePrompt)
-        }
-
         updatePopoverPosition()
-        focusPopoverWindow()
+        popoverWindow?.orderFrontRegardless()
+        popoverWindow?.makeKey()
+
+        if let terminal = terminalView {
+            popoverWindow?.makeFirstResponder(terminal.inputField)
+        }
 
         // Remove old monitors before adding new ones
         removeEventMonitors()
@@ -575,18 +476,11 @@ class WalkerCharacter {
         (themeOverride ?? PopoverTheme.current).withCharacterColor(characterColor).withCustomFont()
     }
 
-    func focusPopoverWindow() {
-        guard let popover = popoverWindow else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        popover.orderFrontRegardless()
-        // 不自动聚焦输入框，让用户自行点击输入
-    }
-
     func createPopoverWindow() {
         let t = resolvedTheme
-        let isMochaStyle = t.name == "Mocha"
         let popoverWidth: CGFloat = 420
         let popoverHeight: CGFloat = 310
+
         let win = KeyableWindow(
             contentRect: CGRect(x: 0, y: 0, width: popoverWidth, height: popoverHeight),
             styleMask: .borderless,
@@ -595,91 +489,43 @@ class WalkerCharacter {
         )
         win.isOpaque = false
         win.backgroundColor = .clear
-        win.hasShadow = true
+        win.hasShadow = false
         win.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 10)
         win.collectionBehavior = [.moveToActiveSpace, .stationary]
         let brightness = t.popoverBg.redComponent * 0.299 + t.popoverBg.greenComponent * 0.587 + t.popoverBg.blueComponent * 0.114
         win.appearance = NSAppearance(named: brightness < 0.5 ? .darkAqua : .aqua)
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: popoverWidth, height: popoverHeight))
+        let isDark = brightness < 0.5
+
+        // Frosted glass container — Ghostty-style
+        let container = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: popoverWidth, height: popoverHeight))
+        container.material = isDark ? .hudWindow : .underWindowBackground
+        container.blendingMode = .behindWindow
+        container.state = isDark ? .active : .followsWindowActiveState
         container.wantsLayer = true
-        container.layer?.backgroundColor = t.popoverBg.cgColor
         container.layer?.cornerRadius = t.popoverCornerRadius
-        container.layer?.cornerCurve = .continuous
         container.layer?.masksToBounds = true
-
-        // Mocha style: add blur effect for translucent glass look
-        if isMochaStyle {
-            let visualEffect = NSVisualEffectView(frame: container.bounds)
-            visualEffect.material = .hudWindow
-            visualEffect.blendingMode = .behindWindow
-            visualEffect.state = .active
-            visualEffect.wantsLayer = true
-            visualEffect.layer?.cornerRadius = t.popoverCornerRadius
-            visualEffect.layer?.cornerCurve = .continuous
-            visualEffect.layer?.masksToBounds = true
-            visualEffect.autoresizingMask = [.width, .height]
-            // Gaussian blur with radius 10
-            if let blurFilter = CIFilter(name: "CIGaussianBlur") {
-                blurFilter.setValue(10.0, forKey: kCIInputRadiusKey)
-                visualEffect.layer?.backgroundFilters = [blurFilter]
-            }
-            container.addSubview(visualEffect, positioned: .below, relativeTo: nil)
-            container.layer?.backgroundColor = t.popoverBg.withAlphaComponent(0.85).cgColor
-        }
-
-        container.layer?.borderWidth = isMochaStyle ? 0 : t.popoverBorderWidth
-        container.layer?.borderColor = isMochaStyle ? NSColor.clear.cgColor : t.popoverBorder.cgColor
+        container.layer?.borderWidth = t.popoverBorderWidth
+        container.layer?.borderColor = t.popoverBorder.cgColor
         container.autoresizingMask = [.width, .height]
-        if let containerLayer = container.layer {
-            let atmosphereLayer = CAGradientLayer()
-            atmosphereLayer.frame = container.bounds
-            // Mocha: atmosphere uses subtle gradient, skip dark bottom
-            let topAlpha: CGFloat = isMochaStyle ? 0.2 : 0.92
-            let bottomAlpha: CGFloat = isMochaStyle ? 0.5 : 0.08
-            atmosphereLayer.colors = [
-                t.titleBarBg.withAlphaComponent(topAlpha).cgColor,
-                t.popoverBg.cgColor,
-                NSColor.black.withAlphaComponent(bottomAlpha).cgColor
-            ]
-            atmosphereLayer.locations = [0, isMochaStyle ? 0.26 : 0.18, 1]
-            atmosphereLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
-            atmosphereLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
-//            containerLayer.insertSublayer(atmosphereLayer, at: 0)
+        // Add a tinted opaque layer behind the glass for more solid appearance
+        let bgLayer = CALayer()
+        bgLayer.frame = container.bounds
+        bgLayer.cornerRadius = t.popoverCornerRadius
+        bgLayer.backgroundColor = t.popoverBg.cgColor
+        container.layer?.insertSublayer(bgLayer, at: 0)
 
-            let glowLayer = CAGradientLayer()
-            glowLayer.frame = CGRect(x: 0, y: popoverHeight * 0.46, width: popoverWidth, height: popoverHeight * 0.54)
-            glowLayer.colors = [
-                t.accentColor.withAlphaComponent(isMochaStyle ? 0.14 : 0.06).cgColor,
-                NSColor.clear.cgColor
-            ]
-            glowLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
-            glowLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
-//            containerLayer.addSublayer(glowLayer)
-
-            if !isMochaStyle {
-                let innerBorderLayer = CALayer()
-                innerBorderLayer.frame = container.bounds.insetBy(dx: 0.5, dy: 0.5)
-                innerBorderLayer.cornerRadius = max(t.popoverCornerRadius - 0.5, 0)
-                innerBorderLayer.cornerCurve = .continuous
-                innerBorderLayer.borderWidth = 1
-                innerBorderLayer.borderColor = t.separatorColor.withAlphaComponent(0.22).cgColor
-//                containerLayer.addSublayer(innerBorderLayer)
-            }
-        }
-
-        func styleTitleBarButton(_ button: NSButton) {
-            button.wantsLayer = true
-            button.layer?.backgroundColor = NSColor.white.withAlphaComponent(isMochaStyle ? 0.035 : 0.1).cgColor
-            button.layer?.cornerRadius = 7
-            button.layer?.cornerCurve = .continuous
-            button.layer?.borderWidth = isMochaStyle ? 0 : 1
-            button.layer?.borderColor = t.separatorColor.withAlphaComponent(0.18).cgColor
-        }
-
+        // Title bar — transparent layer so the popover background remains uniform
         let titleBar = NSView(frame: NSRect(x: 0, y: popoverHeight - 28, width: popoverWidth, height: 28))
         titleBar.wantsLayer = true
-        titleBar.layer?.backgroundColor = isMochaStyle ? NSColor.clear.cgColor : t.titleBarBg.cgColor
+        titleBar.layer?.backgroundColor = NSColor.clear.cgColor
+        // Clip top corners of titleBar to match container's top rounded corners
+        let titleMask = CAShapeLayer()
+        let titlePath = NSBezierPath(roundedRect: titleBar.bounds, xRadius: t.popoverCornerRadius, yRadius: t.popoverCornerRadius)
+        let topClip = NSBezierPath(rect: NSRect(x: 0, y: 0, width: popoverWidth, height: 28))
+        topClip.windingRule = .evenOdd
+        titleMask.path = titlePath.cgPath
+        titleBar.layer?.mask = titleMask
         container.addSubview(titleBar)
 
         let titleLabel = NSTextField(labelWithString: t.titleString(for: provider))
@@ -697,7 +543,6 @@ class WalkerCharacter {
         arrowBtn.contentTintColor = t.titleText.withAlphaComponent(0.75)
         arrowBtn.target = self
         arrowBtn.action = #selector(showProviderMenu(_:))
-        styleTitleBarButton(arrowBtn)
         titleBar.addSubview(arrowBtn)
 
         // Make the title label clickable too
@@ -707,27 +552,6 @@ class WalkerCharacter {
         clickArea.action = #selector(showProviderMenu(_:))
         titleBar.addSubview(clickArea)
 
-        let sep = NSView(frame: NSRect(x: 0, y: popoverHeight - 29, width: popoverWidth, height: 1))
-        sep.wantsLayer = true
-        sep.layer?.backgroundColor = t.separatorColor.cgColor
-        sep.isHidden = isMochaStyle
-        container.addSubview(sep)
-
-        guard popoverMode == .full else {
-            let diagnosticLabel = NSTextField(wrappingLabelWithString: "Popover shell only\nTerminal / session disabled for crash isolation")
-            diagnosticLabel.font = resolvedTheme.font.withSize(13)
-            diagnosticLabel.textColor = t.textPrimary
-            diagnosticLabel.alignment = .center
-            diagnosticLabel.maximumNumberOfLines = 3
-            diagnosticLabel.frame = NSRect(x: 24, y: 110, width: popoverWidth - 48, height: 72)
-            container.addSubview(diagnosticLabel)
-
-            win.contentView = container
-            popoverWindow = win
-            terminalView = nil
-            return
-        }
-
         let refreshBtn = NSButton(frame: NSRect(x: popoverWidth - 48, y: 5, width: 16, height: 16))
         refreshBtn.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
         refreshBtn.imageScaling = .scaleProportionallyDown
@@ -736,7 +560,6 @@ class WalkerCharacter {
         refreshBtn.contentTintColor = t.titleText.withAlphaComponent(0.75)
         refreshBtn.target = self
         refreshBtn.action = #selector(refreshSessionFromButton)
-        styleTitleBarButton(refreshBtn)
         titleBar.addSubview(refreshBtn)
 
         let copyBtn = NSButton(frame: NSRect(x: popoverWidth - 28, y: 5, width: 16, height: 16))
@@ -747,49 +570,13 @@ class WalkerCharacter {
         copyBtn.contentTintColor = t.titleText.withAlphaComponent(0.75)
         copyBtn.target = self
         copyBtn.action = #selector(copyLastResponseFromButton)
-        styleTitleBarButton(copyBtn)
         titleBar.addSubview(copyBtn)
 
-        let statusBadgeWidth: CGFloat = 96
-        let statusBadgeHeight: CGFloat = 18
-        // Move status badge to bottom (TerminalView), hide from title bar
-        let statusBadgeX: CGFloat = -1000  // Move off-screen
-        let statusBadge = NSView(frame: NSRect(
-            x: statusBadgeX,
-            y: floor((titleBar.bounds.height - statusBadgeHeight) / 2),
-            width: statusBadgeWidth,
-            height: statusBadgeHeight
-        ))
-        statusBadge.wantsLayer = true
-        statusBadge.layer?.backgroundColor = NSColor(white: 0, alpha: isMochaStyle ? 0.14 : 0.08).cgColor
-        statusBadge.layer?.cornerRadius = 9
-        statusBadge.layer?.cornerCurve = .continuous
-        statusBadge.layer?.masksToBounds = true
-        statusBadge.layer?.borderWidth = isMochaStyle ? 0 : 1
-        statusBadge.layer?.borderColor = t.separatorColor.withAlphaComponent(0.18).cgColor
-        statusBadge.layer?.shadowColor = t.accentColor.withAlphaComponent(isMochaStyle ? 0.55 : 0.2).cgColor
-        statusBadge.layer?.shadowOpacity = 1
-        statusBadge.layer?.shadowRadius = isMochaStyle ? 12 : 6
-        statusBadge.layer?.shadowOffset = .zero
-
-        let statusDot = NSView(frame: NSRect(x: 0, y: 0, width: 6, height: 6))
-        statusDot.wantsLayer = true
-        statusDot.layer?.cornerRadius = 3
-        statusDot.layer?.masksToBounds = true
-        statusBadge.addSubview(statusDot)
-
-        let statusText = NSTextField(labelWithString: "")
-        statusText.font = resolvedTheme.font.withSize(10)
-        statusText.alignment = .left
-        statusText.backgroundColor = .clear
-        statusText.lineBreakMode = .byClipping
-        statusBadge.addSubview(statusText)
-
-        titleBar.addSubview(statusBadge)
-        statusBadgeView = statusBadge
-        statusDotView = statusDot
-        statusLabel = statusText
-        updateSessionStatus(activePrompt == nil && session?.isBusy == true ? .working : sessionStatus)
+        // Subtle separator — thin line that blends with frosted glass
+        let sep = NSView(frame: NSRect(x: 0, y: popoverHeight - 29, width: popoverWidth, height: 1))
+        sep.wantsLayer = true
+        sep.layer?.backgroundColor = t.popoverBg.cgColor
+        container.addSubview(sep)
 
         let terminal = TerminalView(frame: NSRect(x: 0, y: 0, width: popoverWidth, height: popoverHeight - 29))
         terminal.characterColor = characterColor
@@ -797,16 +584,11 @@ class WalkerCharacter {
         terminal.provider = provider
         terminal.autoresizingMask = [.width, .height]
         terminal.onSendMessage = { [weak self] message in
-            self?.updateSessionStatus(.working)
             self?.session?.send(message: message)
         }
         terminal.onClearRequested = { [weak self] in
             self?.resetSession()
         }
-        terminal.onPromptResponse = { [weak self] response in
-            self?.handlePromptResponse(response)
-        }
-        terminal.applyPrompt(activePrompt)
         container.addSubview(terminal)
 
         win.contentView = container
@@ -818,8 +600,6 @@ class WalkerCharacter {
         session?.terminate()
         session = nil
         currentStreamingText = ""
-        clearPrompt()
-        updateSessionStatus(.ready)
         showingCompletion = false
         currentPhrase = ""
         completionBubbleExpiry = 0
@@ -832,226 +612,39 @@ class WalkerCharacter {
         newSession.start()
     }
 
-    // 统一的 prompt 入口，后续内部事件和本地 JSONL hook 都可以直接复用。
-    func presentPrompt(_ prompt: AgentPrompt, responder: ((AgentPromptResponse) -> Void)? = nil) {
-        activePrompt = prompt
-        activePromptResponder = responder
-        terminalView?.applyPrompt(prompt)
-
-        let status: IslandBarStatus = prompt.kind == .approval ? .approval : .ask
-        updateSessionStatus(status)
-        controller?.publishIslandEvent(
-            from: self,
-            taskID: islandTaskID,
-            status: status,
-            detail: prompt.detail.isEmpty ? prompt.title : prompt.detail,
-            prompt: prompt
-        )
-    }
-
-    func clearPrompt(resumeStatus: IslandBarStatus? = nil, detail: String? = nil) {
-        activePrompt = nil
-        activePromptResponder = nil
-        terminalView?.applyPrompt(nil)
-
-        guard let resumeStatus else { return }
-        updateSessionStatus(resumeStatus)
-        if let detail {
-            controller?.publishIslandEvent(from: self, taskID: islandTaskID, status: resumeStatus, detail: detail)
-        }
-    }
-
-    private func handlePromptResponse(_ response: AgentPromptResponse) {
-        activePromptResponder?(response)
-
-        let summary: String
-        switch response {
-        case .primary(let value):
-            let text = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            summary = text.isEmpty ? "Approved - click to jump" : "Answered: \(compactIslandDetail(text))"
-        case .secondary:
-            summary = "Dismissed - click to jump"
-        case .option(_, let value):
-            summary = "Answered: \(compactIslandDetail(value))"
-        }
-
-        let nextStatus: IslandBarStatus = session?.isBusy == true ? .working : .ready
-        clearPrompt(resumeStatus: nextStatus, detail: summary)
-    }
-
     private func wireSession(_ session: any AgentSession) {
-        let sessionObject = session as AnyObject
-
         session.onText = { [weak self] text in
-            guard let self = self, let current = self.session as AnyObject?, current === sessionObject else { return }
-            self.currentStreamingText += text
-            self.terminalView?.appendStreamingText(text)
+            self?.currentStreamingText += text
+            self?.terminalView?.appendStreamingText(text)
         }
 
         session.onTurnComplete = { [weak self] in
-            guard let self = self, let current = self.session as AnyObject?, current === sessionObject else { return }
-            self.clearPrompt()
-            self.updateSessionStatus(.done)
-            self.terminalView?.endStreaming()
-            self.playCompletionSound()
-            self.showCompletionBubble()
+            self?.terminalView?.endStreaming()
+            self?.playCompletionSound()
+            self?.showCompletionBubble()
         }
 
         session.onError = { [weak self] text in
-            guard let self = self, let current = self.session as AnyObject?, current === sessionObject else { return }
-            self.clearPrompt()
-            self.updateSessionStatus(.error)
-            self.terminalView?.appendError(text)
+            self?.terminalView?.appendError(text)
         }
 
         session.onToolUse = { [weak self] toolName, input in
-            guard let self = self, let current = self.session as AnyObject?, current === sessionObject else { return }
+            guard let self = self else { return }
             let summary = self.formatToolInput(input)
-            self.updateSessionStatus(.working)
             self.terminalView?.appendToolUse(toolName: toolName, summary: summary)
         }
 
         session.onToolResult = { [weak self] summary, isError in
-            guard let self = self, let current = self.session as AnyObject?, current === sessionObject else { return }
-            if isError {
-                self.clearPrompt()
-                self.updateSessionStatus(.error)
-            }
-            self.terminalView?.appendToolResult(summary: summary, isError: isError)
+            self?.terminalView?.appendToolResult(summary: summary, isError: isError)
         }
 
         session.onProcessExit = { [weak self] in
-            guard let self = self, let current = self.session as AnyObject?, current === sessionObject else { return }
-            self.clearPrompt()
-            self.updateSessionStatus(.error)
+            guard let self = self else { return }
             self.terminalView?.endStreaming()
             self.terminalView?.appendError("\(self.provider.displayName) session ended.")
         }
 
-        session.onSessionReady = { [weak self] in
-            guard let self = self, let current = self.session as AnyObject?, current === sessionObject else { return }
-            self.updateSessionStatus(.ready)
-        }
-    }
-
-    private func updateSessionStatus(_ status: IslandBarStatus) {
-        sessionStatus = status
-        guard let statusBadgeView, let statusDotView, let statusLabel else { return }
-
-        let theme = resolvedTheme
-        let isMochaStyle = theme.name == "Mocha"
-        let text: String
-        let color: NSColor
-
-        switch status {
-        case .ready:
-            text = "ready"
-            color = theme.textDim
-        case .working:
-            text = "working"
-            color = theme.accentColor
-        case .approval:
-            text = "approval"
-            color = NSColor(red: 1.0, green: 0.77, blue: 0.28, alpha: 1.0)
-        case .ask:
-            text = "ask"
-            color = theme.accentColor
-        case .done:
-            text = "done"
-            color = theme.successColor
-        case .error:
-            text = "error"
-            color = theme.errorColor
-        }
-
-        statusLabel.stringValue = text
-        statusLabel.textColor = color.withAlphaComponent((status == .working || status == .approval || status == .ask) ? 0.98 : 0.9)
-        statusDotView.layer?.backgroundColor = color.cgColor
-        statusBadgeView.layer?.shadowColor = color.withAlphaComponent(isMochaStyle ? 0.62 : 0.24).cgColor
-        statusBadgeView.layer?.shadowOpacity = (status == .working || status == .approval || status == .ask) ? 1 : (isMochaStyle ? 0.78 : 0.45)
-        statusBadgeView.layer?.shadowRadius = (status == .working || status == .approval || status == .ask) ? (isMochaStyle ? 14 : 7) : (isMochaStyle ? 10 : 5)
-        layoutStatusBadgeContent()
-
-        // Update terminal view's bottom status badge
-        terminalView?.updateStatus(text, isWorking: status == .working || status == .approval || status == .ask)
-
-        // working 状态加一层从左到右掠过的暗影，接近 Codex 的活跃感提示。
-        if status == .working || status == .approval || status == .ask {
-            startStatusSweepAnimation(in: statusBadgeView)
-        } else {
-            stopStatusSweepAnimation()
-        }
-    }
-
-    private func startStatusSweepAnimation(in badgeView: NSView) {
-        guard let badgeLayer = badgeView.layer else { return }
-        let theme = resolvedTheme
-        let isMochaStyle = theme.name == "Mocha"
-        let accent = theme.accentColor
-
-        let sweepLayer: CAGradientLayer
-        if let existing = statusSweepLayer {
-            sweepLayer = existing
-        } else {
-            let created = CAGradientLayer()
-            created.locations = [0, 0.5, 1]
-            created.startPoint = CGPoint(x: 0, y: 0.5)
-            created.endPoint = CGPoint(x: 1, y: 0.5)
-            badgeLayer.addSublayer(created)
-            statusSweepLayer = created
-            sweepLayer = created
-        }
-
-        sweepLayer.colors = [
-            NSColor.clear.cgColor,
-            accent.withAlphaComponent(isMochaStyle ? 0.34 : 0.18).cgColor,
-            NSColor.white.withAlphaComponent(isMochaStyle ? 0.24 : 0.1).cgColor,
-            NSColor.clear.cgColor
-        ]
-        sweepLayer.locations = [0, 0.38, 0.62, 1]
-
-        let sweepWidth = max(badgeView.bounds.width * 0.55, 34)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        sweepLayer.frame = CGRect(x: -sweepWidth, y: 0, width: sweepWidth, height: badgeView.bounds.height)
-        sweepLayer.isHidden = false
-        CATransaction.commit()
-
-        guard sweepLayer.animation(forKey: "workingSweep") == nil else { return }
-        let animation = CABasicAnimation(keyPath: "position.x")
-        animation.fromValue = -sweepWidth / 2
-        animation.toValue = badgeView.bounds.width + sweepWidth / 2
-        animation.duration = 1.05
-        animation.repeatCount = .infinity
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        sweepLayer.add(animation, forKey: "workingSweep")
-    }
-
-    private func stopStatusSweepAnimation() {
-        statusSweepLayer?.removeAnimation(forKey: "workingSweep")
-        statusSweepLayer?.isHidden = true
-    }
-
-    private func layoutStatusBadgeContent() {
-        guard let statusBadgeView, let statusDotView, let statusLabel else { return }
-
-        statusLabel.sizeToFit()
-
-        let badgeBounds = statusBadgeView.bounds
-        let dotSize = statusDotView.bounds.width
-        let spacing: CGFloat = 6
-        let totalWidth = dotSize + spacing + statusLabel.bounds.width
-        let startX = floor((badgeBounds.width - totalWidth) / 2)
-
-        statusDotView.frame.origin = NSPoint(
-            x: startX,
-            y: floor((badgeBounds.height - dotSize) / 2)
-        )
-
-        statusLabel.frame.origin = NSPoint(
-            x: statusDotView.frame.maxX + spacing,
-            y: floor((badgeBounds.height - statusLabel.bounds.height) / 2)
-        )
+        session.onSessionReady = { }
     }
 
     @objc func showProviderMenu(_ sender: Any) {
@@ -1084,7 +677,6 @@ class WalkerCharacter {
         // Terminate existing session and rebuild popover for new provider
         session?.terminate()
         session = nil
-        clearPrompt()
         popoverWindow?.orderOut(nil)
         popoverWindow = nil
         terminalView = nil
@@ -1109,28 +701,20 @@ class WalkerCharacter {
         return input.keys.sorted().prefix(3).joined(separator: ", ")
     }
 
-    private func compactIslandDetail(_ text: String) -> String {
-        let singleLine = text
-            .components(separatedBy: .newlines)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard singleLine.count > 72 else { return singleLine }
-        return String(singleLine.prefix(69)) + "..."
-    }
+    func updatePopoverPosition() {
+        guard let popover = popoverWindow, isIdleForPopover else { return }
+        guard let screen = NSScreen.main else { return }
 
-    private func islandToolDetail(toolName: String, summary: String) -> String {
-        let compactSummary = compactIslandDetail(summary)
-        let normalized = toolName.lowercased()
-        switch normalized {
-        case "bash":
-            return "Bash \(compactSummary)"
-        case "read":
-            return "Read \(compactSummary)"
-        case "edit", "write", "filechange":
-            return "Edit \(compactSummary)"
-        default:
-            return compactSummary.isEmpty ? toolName : "\(toolName) \(compactSummary)"
-        }
+        let charFrame = window.frame
+        let popoverSize = popover.frame.size
+        var x = charFrame.midX - popoverSize.width / 2
+        let y = charFrame.maxY - 15
+
+        let screenFrame = screen.frame
+        x = max(screenFrame.minX + 4, min(x, screenFrame.maxX - popoverSize.width - 4))
+        let clampedY = min(y, screenFrame.maxY - popoverSize.height - 4)
+
+        popover.setFrameOrigin(NSPoint(x: x, y: clampedY))
     }
 
     private func screenForCharacterOrigin(_ origin: NSPoint) -> NSScreen? {
@@ -1139,8 +723,8 @@ class WalkerCharacter {
     }
 
     private func dockAnchoredY(for screen: NSScreen) -> CGFloat {
-        let bottomPadding = displayHeight * 0.15
-        return screen.visibleFrame.origin.y - bottomPadding + yOffset
+        // 拖动时锁定在dock栏顶部，不留额外空间
+        return screen.visibleFrame.origin.y
     }
 
     private func clampedCharacterOrigin(for origin: NSPoint) -> NSPoint {
@@ -1160,30 +744,11 @@ class WalkerCharacter {
         positionProgress = min(max(relativeX / usableWidth, 0), 1)
     }
 
-    private func applyManualWindowOrigin() {
-        guard let origin = manualWindowOrigin else { return }
-        let clamped = clampedCharacterOrigin(for: origin)
-        manualWindowOrigin = clamped
-        window.setFrameOrigin(clamped)
+    private func applyManualWindowOrigin(_ origin: NSPoint) {
+        window.setFrameOrigin(origin)
         syncPositionProgressToCurrentWindow()
         updatePopoverPosition()
         updateThinkingBubble()
-    }
-
-    func updatePopoverPosition() {
-        guard let popover = popoverWindow, isIdleForPopover else { return }
-        guard let screen = window.screen ?? NSScreen.main else { return }
-
-        let charFrame = window.frame
-        let popoverSize = popover.frame.size
-        var x = charFrame.midX - popoverSize.width / 2
-        let y = charFrame.maxY - 15
-
-        let screenFrame = screen.frame
-        x = max(screenFrame.minX + 4, min(x, screenFrame.maxX - popoverSize.width - 4))
-        let clampedY = min(y, screenFrame.maxY - popoverSize.height - 4)
-
-        popover.setFrameOrigin(NSPoint(x: x, y: clampedY))
     }
 
     // MARK: - Thinking Bubble
@@ -1451,14 +1016,15 @@ class WalkerCharacter {
         }
 
         updateFlip()
-        showVideoPresentation()
-        updateSpriteFrame(for: 0)
+        queuePlayer.seek(to: .zero)
+        queuePlayer.play()
     }
 
     func enterPause() {
         isWalking = false
         isPaused = true
-        showIdlePresentation(releaseVideo: true)
+        queuePlayer.pause()
+        queuePlayer.seek(to: .zero)
         let delay = Double.random(in: 5.0...12.0)
         pauseEndTime = CACurrentMediaTime() + delay
     }
@@ -1467,14 +1033,11 @@ class WalkerCharacter {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if goingRight {
-            spriteLayer.transform = CATransform3DIdentity
-            idleLayer.transform = CATransform3DIdentity
+            playerLayer.transform = CATransform3DIdentity
         } else {
-            spriteLayer.transform = CATransform3DMakeScale(-1, 1, 1)
-            idleLayer.transform = CATransform3DMakeScale(-1, 1, 1)
+            playerLayer.transform = CATransform3DMakeScale(-1, 1, 1)
         }
-        spriteLayer.frame = CGRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
-        idleLayer.frame = CGRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
+        playerLayer.frame = CGRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
         CATransaction.commit()
     }
 
@@ -1511,8 +1074,8 @@ class WalkerCharacter {
 
     func update(dockX: CGFloat, dockWidth: CGFloat, dockTopY: CGFloat) {
         currentTravelDistance = max(dockWidth - displayWidth, 0)
-        if isDraggingCharacter, manualWindowOrigin != nil {
-            applyManualWindowOrigin()
+        // 拖动时不更新位置，由pointer tracking控制
+        if isDraggingCharacter {
             return
         }
         if isIdleForPopover {
@@ -1529,22 +1092,22 @@ class WalkerCharacter {
         let now = CACurrentMediaTime()
 
         if isPaused {
-            let travelDistance = max(dockWidth - displayWidth, 0)
-            let x = dockX + travelDistance * positionProgress + currentFlipCompensation
-            let bottomPadding = displayHeight * 0.15
-            let y = dockTopY - bottomPadding + yOffset
-            window.setFrameOrigin(NSPoint(x: x, y: y))
             if now >= pauseEndTime {
                 startWalk()
+            } else {
+                let travelDistance = max(dockWidth - displayWidth, 0)
+                let x = dockX + travelDistance * positionProgress + currentFlipCompensation
+                let bottomPadding = displayHeight * 0.15
+                let y = dockTopY - bottomPadding + yOffset
+                window.setFrameOrigin(NSPoint(x: x, y: y))
+                return
             }
-            return
         }
 
         if isWalking {
             let elapsed = now - walkStartTime
             let videoTime = min(elapsed, videoDuration)
             let travelDistance = currentTravelDistance
-            updateSpriteFrame(for: videoTime)
 
             // Interpolate in pixel space for consistent speed across screen changes
             let walkNorm = elapsed >= videoDuration ? 1.0 : movementPosition(at: videoTime)

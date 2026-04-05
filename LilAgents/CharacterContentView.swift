@@ -8,23 +8,24 @@ class KeyableWindow: NSWindow {
 class CharacterContentView: NSView {
     weak var character: WalkerCharacter?
 
-    private func screenPoint(for event: NSEvent) -> NSPoint? {
-        window?.convertPoint(toScreen: event.locationInWindow)
-    }
+    private var isDragging = false
+    private var dragOffset: CGFloat = 0
+    private var windowOriginBeforeDrag: NSPoint = .zero
+    private var mouseStartScreen: NSPoint = .zero
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let localPoint = convert(point, from: superview)
         guard bounds.contains(localPoint) else { return nil }
 
-        // AVPlayerLayer is GPU-rendered so layer.render(in:) won't capture video pixels.
-        // Use CGWindowListCreateImage to sample actual on-screen alpha at click point.
         let screenPoint = window?.convertPoint(toScreen: convert(localPoint, to: nil)) ?? .zero
-        // Use the full virtual display height for the CG coordinate flip, not just
-        // the main screen. NSScreen coordinates have origin at bottom-left of the
-        // primary display, while CG uses top-left. The primary screen's height is
-        // the correct basis for the flip across all monitors.
         guard let primaryScreen = NSScreen.screens.first else { return nil }
         let flippedY = primaryScreen.frame.height - screenPoint.y
+
+        // Pass clicks below the dock top edge through to the dock
+        let dockTopY = primaryScreen.visibleFrame.origin.y
+        if screenPoint.y < dockTopY {
+            return nil
+        }
 
         let captureRect = CGRect(x: screenPoint.x - 0.5, y: flippedY - 0.5, width: 1, height: 1)
         guard let windowID = window?.windowNumber, windowID > 0 else { return nil }
@@ -51,7 +52,6 @@ class CharacterContentView: NSView {
             }
         }
 
-        // Fallback: accept click if within center 60% of the view
         let insetX = bounds.width * 0.2
         let insetY = bounds.height * 0.15
         let hitRect = bounds.insetBy(dx: insetX, dy: insetY)
@@ -59,23 +59,35 @@ class CharacterContentView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let point = screenPoint(for: event) else { return }
-        character?.beginPointerTracking(at: point)
+        isDragging = false
+        dragOffset = 0
+        windowOriginBeforeDrag = window?.frame.origin ?? .zero
+        mouseStartScreen = NSEvent.mouseLocation
+        character?.beginPointerTracking(at: mouseStartScreen)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let point = screenPoint(for: event) else { return }
-        character?.continuePointerTracking(to: point)
+        let current = NSEvent.mouseLocation
+        let deltaX = current.x - mouseStartScreen.x
+        dragOffset = deltaX
+
+        // Once offset exceeds threshold, start dragging
+        if !isDragging && abs(dragOffset) > 3 {
+            isDragging = true
+        }
+
+        if isDragging {
+            character?.continuePointerTracking(to: current)
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard let point = screenPoint(for: event) else {
-            character?.cancelPointerTracking()
-            return
-        }
-
-        if character?.endPointerTracking(at: point) == true {
+        if !isDragging {
+            // It was a click
             character?.handleClick()
         }
+        isDragging = false
+        dragOffset = 0
+        character?.endPointerTracking(at: NSEvent.mouseLocation)
     }
 }

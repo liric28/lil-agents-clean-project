@@ -150,7 +150,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     char.terminalView?.replayHistory(session.history)
                 }
                 char.updatePopoverPosition()
-                char.focusPopoverWindow()
+                char.popoverWindow?.orderFrontRegardless()
+                char.popoverWindow?.makeKey()
+                if let terminal = char.terminalView {
+                    char.popoverWindow?.makeFirstResponder(terminal.inputField)
+                }
             }
         }
     }

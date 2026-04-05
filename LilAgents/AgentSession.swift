@@ -19,7 +19,7 @@ enum AgentProvider: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .claude:     return "Claude"
+        case .claude:   return "Claude"
         case .claudeCode: return "Claude Code"
         case .codex:    return "Codex"
         case .copilot:  return "Copilot"
@@ -43,7 +43,7 @@ enum AgentProvider: String, CaseIterable {
 
     var binaryName: String {
         switch self {
-        case .claude:     return "claude"
+        case .claude:   return "claude"
         case .claudeCode: return "claude"
         case .codex:    return "codex"
         case .copilot:  return "copilot"
@@ -128,77 +128,6 @@ struct AgentMessage {
     enum Role { case user, assistant, error, toolUse, toolResult }
     let role: Role
     let text: String
-}
-
-enum AgentPromptKind {
-    case approval
-    case ask
-
-    var defaultPrimaryActionTitle: String {
-        switch self {
-        case .approval:
-            return "Allow"
-        case .ask:
-            return "Send"
-        }
-    }
-
-    var defaultSecondaryActionTitle: String? {
-        switch self {
-        case .approval:
-            return "Deny"
-        case .ask:
-            return "Cancel"
-        }
-    }
-}
-
-struct AgentPrompt {
-    let id: String
-    let kind: AgentPromptKind
-    let title: String
-    let detail: String
-    let primaryActionTitle: String
-    let secondaryActionTitle: String?
-    let placeholder: String?
-    let prefilledValue: String
-    let options: [String]
-
-    init(
-        id: String = UUID().uuidString,
-        kind: AgentPromptKind,
-        title: String,
-        detail: String,
-        primaryActionTitle: String? = nil,
-        secondaryActionTitle: String? = nil,
-        placeholder: String? = nil,
-        prefilledValue: String = "",
-        options: [String] = []
-    ) {
-        self.id = id
-        self.kind = kind
-        self.title = title
-        self.detail = detail
-        self.primaryActionTitle = primaryActionTitle ?? kind.defaultPrimaryActionTitle
-        self.secondaryActionTitle = secondaryActionTitle ?? kind.defaultSecondaryActionTitle
-        self.placeholder = placeholder
-        self.prefilledValue = prefilledValue
-        self.options = options
-    }
-
-    var usesChoiceButtons: Bool {
-        !options.isEmpty
-    }
-
-    var requiresTextInput: Bool {
-        kind == .ask && options.isEmpty
-    }
-}
-
-enum AgentPromptResponse {
-    case primary(String?)
-    case secondary
-    case option(Int, String)
 }
 
 // MARK: - Session Protocol

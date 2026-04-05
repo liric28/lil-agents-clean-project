@@ -142,9 +142,9 @@ class ClaudeCodeSession: AgentSession {
             ]
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
-              let jsonStr = String(data: data, encoding: .utf8) else { return }
-        let line = jsonStr + "\n"
-        pipe.fileHandleForWriting.write(line.data(using: .utf8)!)
+              let jsonStr = String(data: data, encoding: .utf8),
+              let lineData = (jsonStr + "\n").data(using: .utf8) else { return }
+        try? pipe.fileHandleForWriting.write(contentsOf: lineData)
     }
 
     func terminate() {
