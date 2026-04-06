@@ -539,6 +539,12 @@ class WalkerCharacter {
 
         let arrowBtn = NSButton(frame: NSRect(x: titleLabel.frame.maxX + 2, y: 5, width: 16, height: 16))
         arrowBtn.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Switch provider")
+        if PopoverTheme.current.name == "Mocha" {
+            arrowBtn.title = ""
+            arrowBtn.image = nil
+            let spinner = ReadyForInputIndicatorIcon(color: .green)
+            arrowBtn.addSubview(spinner)
+        }
         arrowBtn.imageScaling = .scaleProportionallyDown
         arrowBtn.bezelStyle = .inline
         arrowBtn.isBordered = false
@@ -577,7 +583,7 @@ class WalkerCharacter {
         // Subtle separator — thin line that blends with frosted glass
         let sep = NSView(frame: NSRect(x: 0, y: popoverHeight - 29, width: popoverWidth, height: 1))
         sep.wantsLayer = true
-        sep.layer?.backgroundColor = t.popoverBg.cgColor
+        sep.layer?.backgroundColor = t.separatorColor.cgColor
         container.addSubview(sep)
 
         let terminal = TerminalView(frame: NSRect(x: 0, y: 0, width: popoverWidth, height: popoverHeight - 29))
