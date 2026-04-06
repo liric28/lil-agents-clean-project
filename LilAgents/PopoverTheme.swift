@@ -153,15 +153,15 @@ struct PopoverTheme {
     // Mocha theme — Catppuccin-inspired dark palette
     static let mocha = PopoverTheme(
         name: "Mocha",
-        popoverBg: NSColor(red: 24/255, green: 24/255, blue: 37/255, alpha: 0.85),
+        popoverBg: NSColor(red: 24/255, green: 24/255, blue: 37/255, alpha: 0.5),
         popoverBorder: NSColor(red: 108/255, green: 112/255, blue: 134/255, alpha: 0.34),
         popoverBorderWidth: 0,
         popoverCornerRadius: 16,
-        titleBarBg: NSColor(red: 17/255, green: 17/255, blue: 27/255, alpha: 0.85),
+        titleBarBg: NSColor(red: 17/255, green: 17/255, blue: 27/255, alpha: 0.5),
         titleText: NSColor(red: 180/255, green: 190/255, blue: 254/255, alpha: 0.96),
         titleFont: .monospacedSystemFont(ofSize: 11, weight: .bold),
         titleFormat: .lowercaseTilde,
-        separatorColor: NSColor(red: 88/255, green: 91/255, blue: 112/255, alpha: 0.28),
+        separatorColor: NSColor(red: 88/255, green: 91/255, blue: 112/255, alpha: 0),
         font: .monospacedSystemFont(ofSize: 12, weight: .regular),
         fontBold: .monospacedSystemFont(ofSize: 12, weight: .bold),
         textPrimary: NSColor(red: 205/255, green: 214/255, blue: 244/255, alpha: 1.0),

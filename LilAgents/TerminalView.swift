@@ -146,7 +146,6 @@ class TerminalView: NSView {
     }
 
     private func setupStatusIndicator() {
-        let t = theme
 
         // Container - semi-transparent rounded bar
         statusContainer.wantsLayer = true
@@ -318,7 +317,7 @@ class TerminalView: NSView {
         addSubview(scrollView)
 
         inputField.frame = NSRect(
-            x: padding, y: 6,
+            x: padding + 10, y: 6,
             width: frame.width - padding * 2,
             height: inputHeight
         )
@@ -338,14 +337,22 @@ class TerminalView: NSView {
         inputField.target = self
         inputField.action = #selector(inputSubmitted)
         addSubview(inputField)
-
+        
+        if PopoverTheme.current.name == "Mocha" {
+            let spinner = ProcessingSpinner(frame: NSRect(x: 0, y: 13, width: 30, height: 30))
+            addSubview(spinner)
+        } else {
+            let spinner = RunningIcon(size: 12, color: NSColor(red: 0.85, green: 0.47, blue: 0.34, alpha: 1.0))
+            spinner.frame.origin = NSPoint(x: 11, y: 22)
+            addSubview(spinner)
+        }
+        
         setupStatusIndicator()
         layoutStatusIndicator(inputHeight: inputHeight, padding: padding)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        let t = theme
         let inputHeight: CGFloat = 30
         let padding: CGFloat = 10
 
@@ -356,7 +363,7 @@ class TerminalView: NSView {
         )
 
         inputField.frame = NSRect(
-            x: padding, y: 6,
+            x: padding + 10, y: 6,
             width: newSize.width - padding * 2,
             height: inputHeight
         )
@@ -725,5 +732,231 @@ class TerminalView: NSView {
             i = text.index(after: i)
         }
         return result
+    }
+}
+
+///////////////////////////////////////
+
+class ProcessingSpinner: NSView {
+    
+    // MARK: - Properties
+    private let textField = NSTextField()
+    private let symbols = ["·", "✢", "✳", "∗", "✻", "✽"]
+    private let color = NSColor(red: 0.85, green: 0.47, blue: 0.34, alpha: 1.0)
+    private var currentIndex = 0
+    private var timer: Timer?
+    
+    // MARK: - Initialization
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupUI()
+        startAnimating()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupUI()
+        startAnimating()
+    }
+    
+    // MARK: - Setup
+    private func setupUI() {
+        // 配置 TextField
+        textField.stringValue = symbols[0]
+        textField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+        textField.textColor = color
+        textField.alignment = .center
+        textField.isBezeled = false
+        textField.isEditable = false
+        textField.isSelectable = false
+        textField.drawsBackground = false
+        textField.frame = CGRect(x: 0, y: 0, width: 12, height: 30)
+        
+        addSubview(textField)
+        
+        // 使用 Auto Layout 居中
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            textField.centerXAnchor.constraint(equalTo: centerXAnchor),
+            textField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            textField.widthAnchor.constraint(equalToConstant: 12)
+        ])
+    }
+    
+    // MARK: - Animation Control
+    func startAnimating() {
+        stopAnimating()
+        
+        timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.currentIndex = (self.currentIndex + 1) % self.symbols.count
+            self.textField.stringValue = self.symbols[self.currentIndex]
+        }
+    }
+    
+    func stopAnimating() {
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    // MARK: - Cleanup
+    deinit {
+        stopAnimating()
+    }
+}
+
+////////////////////////////////
+
+class RunningIcon: NSView {
+    
+    // MARK: - Properties
+    private let size: CGFloat
+    private let color: NSColor
+    private var rotation: CGFloat = 0
+    private var displayLink: CVDisplayLink?
+    
+    init(size: CGFloat = 12, color: NSColor = .cyan) {
+        self.size = size
+        self.color = color
+        super.init(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        wantsLayer = true
+        startAnimating()
+    }
+    
+    required init?(coder: NSCoder) {
+        self.size = 12
+        self.color = .cyan
+        super.init(coder: coder)
+        wantsLayer = true
+        startAnimating()
+    }
+    
+    // MARK: - Drawing
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        
+        let scale = size / 30.0
+        let dotSize: CGFloat = 4 * scale
+        
+        // 实心点坐标
+        let solidDots: [(CGFloat, CGFloat)] = [
+            (15, 3), (7, 7), (15, 7), (23, 7),
+            (15, 11), (15, 19), (3, 15), (7, 15),
+            (11, 15), (19, 15), (23, 15), (27, 15),
+            (7, 23), (15, 23), (23, 23), (15, 27)
+        ]
+        
+        // 半透明点坐标
+        let fadedDots: [(CGFloat, CGFloat)] = [
+            (11, 11), (19, 11), (11, 19), (19, 19)
+        ]
+        
+        // 保存图形状态并应用旋转
+        context.saveGState()
+        context.translateBy(x: bounds.midX, y: bounds.midY)
+        context.rotate(by: rotation * .pi / 180)
+        context.translateBy(x: -bounds.midX, y: -bounds.midY)
+        
+        // 绘制实心点
+        context.setFillColor(color.cgColor)
+        for (x, y) in solidDots {
+            let rect = CGRect(
+                x: x * scale - dotSize/2,
+                y: y * scale - dotSize/2,
+                width: dotSize,
+                height: dotSize
+            )
+            context.fillEllipse(in: rect)
+        }
+        
+        // 绘制半透明点
+        context.setFillColor(color.withAlphaComponent(0.4).cgColor)
+        for (x, y) in fadedDots {
+            let rect = CGRect(
+                x: x * scale - dotSize/2,
+                y: y * scale - dotSize/2,
+                width: dotSize,
+                height: dotSize
+            )
+            context.fillEllipse(in: rect)
+        }
+        
+        context.restoreGState()
+    }
+    
+    // MARK: - Animation
+    private func startAnimating() {
+        // 使用 Timer 进行旋转动画
+        Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.rotation += 360.0 / (2.0 * 60.0) // 2秒一圈，60fps
+            if self.rotation >= 360 {
+                self.rotation -= 360
+            }
+            self.needsDisplay = true
+        }
+    }
+    
+    func stopAnimating() {
+        // Timer 会自动管理，这里留空以便外部控制
+    }
+}
+
+///////////////////////////////////
+
+import Cocoa
+
+class ReadyForInputIndicatorIcon: NSView {
+    
+    private let color: NSColor
+    private let pixels: [(CGFloat, CGFloat)] = [
+        (5, 15), (9, 19), (13, 23),
+        (17, 19), (21, 15), (25, 11), (29, 7)
+    ]
+    
+    init(size: CGFloat = 14, color: NSColor = .green) {
+        self.color = color
+        super.init(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        wantsLayer = true
+    }
+    
+    required init?(coder: NSCoder) {
+        self.color = .green
+        super.init(coder: coder)
+        wantsLayer = true
+    }
+    
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        
+        let size = bounds.width
+        let scale = size / 30.0
+        let pixelSize: CGFloat = 4 * scale
+        
+        // 保存当前图形状态
+        context.saveGState()
+        
+        // 关键：翻转坐标系，使其与 SwiftUI 一致（原点在左上角，Y 轴向下）
+        context.translateBy(x: 0, y: size)
+        context.scaleBy(x: 1, y: -1)
+        
+        context.setFillColor(color.cgColor)
+        
+        for (x, y) in pixels {
+            let rect = CGRect(
+                x: x * scale - pixelSize / 2,
+                y: y * scale - pixelSize / 2,
+                width: pixelSize,
+                height: pixelSize
+            )
+            context.fill(rect)
+        }
+        
+        // 恢复图形状态
+        context.restoreGState()
     }
 }
