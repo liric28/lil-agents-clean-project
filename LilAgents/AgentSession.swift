@@ -100,7 +100,7 @@ enum AgentProvider: String, CaseIterable {
 
     func createSession() -> any AgentSession {
         switch self {
-        case .claude:   return ClaudeCodeSession()
+        case .claude:   return ClaudeSession()
         case .codex:    return CodexSession()
         case .copilot:  return CopilotSession()
         case .gemini:   return GeminiSession()
