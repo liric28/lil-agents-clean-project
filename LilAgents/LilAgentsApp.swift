@@ -16,11 +16,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
+    // CodeIsland integration
+    private let codeIslandDelegate = CodeIslandAppDelegate.shared
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         controller = LilAgentsController()
         controller?.start()
         setupMenuBar()
+
+        // Start CodeIsland HookServer and panel
+        codeIslandDelegate.startCodeIsland()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
