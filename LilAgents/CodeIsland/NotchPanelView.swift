@@ -339,6 +339,7 @@ private struct CompactLeftWing: View {
                     .overlay(Rectangle().stroke(.white.opacity(0.1), lineWidth: 1))
                 }
             } else {
+//                MascotView(source: "claude", status: .idle, size: mascotSize)
                 MascotView(source: displaySource, status: displayStatus, size: mascotSize)
                     .id(displaySource)
                     .transition(.opacity)
@@ -642,10 +643,10 @@ private struct IdleIndicatorBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left: mascot
+            // Left: mascot 刘海左边像素 ghost
             HStack(spacing: 6) {
                 MascotView(source: "claude", status: .idle, size: mascotSize)
-                    .opacity(hovered ? 0.9 : 0.5)
+//                    .opacity(hovered ? 0.9 : 0.5)
             }
             .padding(.leading, 6)
 
@@ -1433,6 +1434,7 @@ private struct SessionCard: View {
         HStack(alignment: .center, spacing: 8) {
             // Column 1: Character + subagent icons
             VStack(spacing: 3) {
+//                MascotView(source: "claude", status: .idle, size: 32)
                 MascotView(source: session.source, status: session.status, size: 32)
                 if showAgentDetails && !session.subagents.isEmpty {
                     let sorted = session.subagents.values.sorted { $0.startTime < $1.startTime }

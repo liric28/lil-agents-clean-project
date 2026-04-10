@@ -488,7 +488,7 @@ private struct AppearancePreview: View {
         HStack(alignment: .center, spacing: 8) {
             // Column 1: Mascot
             VStack(spacing: 3) {
-                MascotView(source: "claude", status: .processing, size: 32)
+                MascotView(source: "claude", status: .processing, size: 24)
                 if showDetails {
                     HStack(spacing: 1) {
                         MiniAgentIcon(active: true, size: 8)
@@ -636,7 +636,7 @@ private struct MascotRow: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.black)
                     .frame(width: 56, height: 56)
-                MascotView(source: source, status: status, size: 40)
+                MascotView(source: source, status: status, size: 28)
             }
 
             VStack(alignment: .leading, spacing: 4) {

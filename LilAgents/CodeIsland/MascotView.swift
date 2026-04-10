@@ -99,7 +99,7 @@ private struct GhostPixelMascotView: View {
     ]
 
     private func isBlinking(_ t: Double) -> Bool {
-        let cycle = max(3.2, 6.4 / max(speed, 0.45))
+        let cycle = max(2, 3 / max(speed, 0.65))
         let phase = t.truncatingRemainder(dividingBy: cycle)
         return phase > cycle * 0.76 && phase < cycle * 0.86
     }
@@ -107,10 +107,6 @@ private struct GhostPixelMascotView: View {
     private func isCursorVisible(_ t: Double) -> Bool {
         let cycle = max(0.42, 0.84 / max(speed, 0.5))
         return t.truncatingRemainder(dividingBy: cycle) < cycle * 0.48
-    }
-
-    private var cursorBaseOpacity: Double {
-        1
     }
 
     var body: some View {
@@ -153,9 +149,10 @@ private struct GhostPixelMascotView: View {
                     .fill(colors[0])
                     .frame(width: 4, height: 10)
                     .shadow(color: colors[0].opacity(0.60), radius: 6)
-                    .opacity(cursorVisible ? cursorBaseOpacity : 0)
+                    .opacity(cursorVisible ? 1 : 0)
             }
             .frame(width: ghostWidth + pixel + 4, height: max(ghostHeight, cursorHeight))
+            .offset(x: 6)  // 整体向右偏移6点
         }
         .onAppear {
             DepartureMonoFont.registerIfNeeded()
