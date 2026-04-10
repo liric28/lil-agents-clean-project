@@ -16,9 +16,6 @@ struct NotchPanelView: View {
     /// Delayed hover: prevents accidental expansion when mouse passes through
     @State private var hoverTimer: Timer?
     @State private var idleHovered = false
-    /// Curtain animation for tool status toggle
-    @State private var curtainOffset: CGFloat = 0
-    @State private var curtainOpacity: Double = 1
     @State private var displayedToolStatus: Bool = SettingsDefaults.showToolStatus
 
     private var isActive: Bool { !appState.sessions.isEmpty }
@@ -29,24 +26,55 @@ struct NotchPanelView: View {
     }
     /// Whether the bar content should be visible (respects hideWhenNoSession)
     private var showBar: Bool {
-        isActive && !(hideWhenNoSession && appState.activeSessionCount == 0)
+        isActive && !(hideWhenNoSession && appState.totalSessionCount == 0)
     }
     private var shouldShowExpanded: Bool {
         showBar && appState.surface.isExpanded
     }
 
     /// Mascot size — fits within the menu bar height
-    private var mascotSize: CGFloat { min(27, notchHeight - 6) }
+    private var mascotSize: CGFloat { min(16, notchHeight - 6) }
 
     /// Minimum wing width needed to display compact bar content
     private var compactWingWidth: CGFloat { mascotSize + 14 }
 
+    /// 用户指定：收起态刘海长度固定 142pt，并做成纯黑硬件刘海感。
+    private let collapsedNotchWidth: CGFloat = 142
+    private let expandedNotchWidth: CGFloat = 422
+
+    /// 收起态尽量贴近系统刘海：更薄、更少外扩；展开态保留一点面板感。
+    private var shellTopExtension: CGFloat {
+        if shouldShowExpanded { return hasNotch ? 8 : 10 }
+        return hasNotch ? 0 : 4
+    }
+
+    private var shellBottomRadius: CGFloat {
+        if shouldShowExpanded { return hasNotch ? 20 : 22 }
+        return hasNotch ? 10 : 11
+    }
+
+    private var shellFill: Color {
+        .black
+    }
+
+    private var shellHighlightOpacity: Double {
+        shouldShowExpanded ? 0.03 : 0
+    }
+
+    private var shellStrokeOpacity: Double {
+        shouldShowExpanded ? 0.04 : 0
+    }
+
+    private var shellShadowOpacity: Double {
+        shouldShowExpanded ? 0.12 : 0
+    }
+
     /// Total panel width — adapts based on state and screen geometry
     private var panelWidth: CGFloat {
-        let maxWidth = min(620, screenWidth - 40)
-        if showIdleIndicator { return idleHovered ? notchW + compactWingWidth * 2 + 80 : notchW + compactWingWidth * 2 }
-        if !isActive { return hasNotch ? notchW - 20 : notchW }
-        if shouldShowExpanded { return min(max(notchW + 200, 580), maxWidth) }
+        if showIdleIndicator { return idleHovered ? collapsedNotchWidth + 40 : collapsedNotchWidth }
+        if !isActive { return 0 }
+        if shouldShowExpanded { return min(expandedNotchWidth, screenWidth - 40) }
+        if hasNotch { return collapsedNotchWidth }
         let wing = compactWingWidth
         let extra: CGFloat = appState.status == .idle ? 0 : 20
         // Reserve space for tool status — proportional to screen width
@@ -62,7 +90,7 @@ struct NotchPanelView: View {
                     HStack(spacing: 0) {
                         CompactLeftWing(appState: appState, expanded: shouldShowExpanded, mascotSize: mascotSize, hasNotch: hasNotch, showToolStatus: showToolStatus)
                         if hasNotch && !shouldShowExpanded {
-                            Spacer(minLength: notchW)
+                            CompactNotchSessionTitle(appState: appState, notchWidth: notchW)
                         } else if !shouldShowExpanded && showToolStatus {
                             CompactToolStatus(appState: appState)
                             Spacer(minLength: 0)
@@ -90,7 +118,7 @@ struct NotchPanelView: View {
                 // Below-notch expanded content
                 if shouldShowExpanded {
                     Line()
-                        .stroke(.white.opacity(0.15), style: StrokeStyle(lineWidth: 0.5, dash: [4, 3]))
+                        .stroke(.white.opacity(0.08), lineWidth: 0.5)
                         .frame(height: 0.5)
                         .padding(.horizontal, 12)
 
@@ -151,32 +179,42 @@ struct NotchPanelView: View {
             .frame(width: panelWidth)
             .clipped()
             .background(
-                NotchPanelShape(
-                    topExtension: shouldShowExpanded ? 14 : 3,
-                    bottomRadius: shouldShowExpanded ? 24 : 12,
-                    minHeight: notchHeight
-                )
-                .fill(.black)
+                ZStack {
+                    NotchPanelShape(
+                        topExtension: shellTopExtension,
+                        bottomRadius: shellBottomRadius,
+                        minHeight: notchHeight
+                    )
+                    .fill(shellFill)
+
+                    NotchPanelShape(
+                        topExtension: shellTopExtension,
+                        bottomRadius: shellBottomRadius,
+                        minHeight: notchHeight
+                    )
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(shellHighlightOpacity),
+                                .white.opacity(0.012),
+                                .clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    NotchPanelShape(
+                        topExtension: shellTopExtension,
+                        bottomRadius: shellBottomRadius,
+                        minHeight: notchHeight
+                    )
+                    .stroke(.white.opacity(shellStrokeOpacity), lineWidth: 0.6)
+                }
+                .shadow(color: .black.opacity(shellShadowOpacity), radius: shouldShowExpanded ? 18 : 8, y: shouldShowExpanded ? 10 : 3)
             )
-            .offset(y: curtainOffset)
-            .opacity(curtainOpacity)
             .onChange(of: showToolStatus) { _, newValue in
-                // Phase 1: entire bar slides up and fades out
-                withAnimation(.easeIn(duration: 0.2)) {
-                    curtainOffset = -notchHeight
-                    curtainOpacity = 0
-                }
-                // Phase 2: switch width while hidden
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    displayedToolStatus = newValue
-                }
-                // Phase 3: entire bar slides back down
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        curtainOffset = 0
-                        curtainOpacity = 1
-                    }
-                }
+                displayedToolStatus = newValue
             }
             .onAppear { displayedToolStatus = showToolStatus }
             .contentShape(Rectangle())
@@ -340,6 +378,35 @@ private struct CompactLeftWing: View {
     }
 }
 
+private struct CompactNotchSessionTitle: View {
+    var appState: AppState
+    let notchWidth: CGFloat
+
+    private var displaySessionId: String? {
+        appState.rotatingSessionId ?? appState.activeSessionId ?? appState.sessions.keys.sorted().first
+    }
+
+    private var displayTitle: String? {
+        guard let sid = displaySessionId, let session = appState.sessions[sid] else { return nil }
+        let normalizedSessionId = session.displaySessionId(sessionId: sid)
+        return session.displayTitle(sessionId: normalizedSessionId)
+    }
+
+    var body: some View {
+        ZStack {
+            if let displayTitle {
+                Text(displayTitle)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 8)
+            }
+        }
+        .frame(width: notchWidth)
+    }
+}
+
 /// Right side: project name + session count (detailed) or just count (simple)
 private struct CompactRightWing: View {
     var appState: AppState
@@ -387,7 +454,7 @@ private struct CompactRightWing: View {
                             Text("\(active)")
                                 .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
                             Text("/")
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(.white)
                         }
                         Text("\(total)")
                             .foregroundStyle(.white.opacity(0.9))
@@ -402,7 +469,7 @@ private struct CompactRightWing: View {
                             Text("\(active)")
                                 .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
                             Text("/")
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(.white)
                         }
                         Text("\(total)")
                             .foregroundStyle(.white.opacity(0.9))
@@ -447,6 +514,7 @@ private struct CompactToolStatus: View {
     private var liveTool: String? { displaySession?.currentTool }
     private var liveDesc: String? { displaySession?.toolDescription }
     private var displayStatus: AgentStatus { displaySession?.status ?? .idle }
+    private var latestPrompt: String? { displaySession?.lastUserPrompt }
     private var projectName: String? {
         guard let cwd = displaySession?.cwd, !cwd.isEmpty else { return nil }
         return (cwd as NSString).lastPathComponent
@@ -465,30 +533,36 @@ private struct CompactToolStatus: View {
         return trimmed
     }
 
+    /// Truncate prompt to fit display
+    private func shortPrompt(_ prompt: String) -> String {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count > 40 {
+            return String(trimmed.prefix(37)) + "..."
+        }
+        return trimmed
+    }
+
     /// Whether there's any activity worth showing (tool running or thinking)
     private var hasActivity: Bool { shownTool != nil || displayStatus == .processing }
 
     var body: some View {
         HStack(spacing: 5) {
-            // Project name — only shown when there's tool activity
-            if hasActivity, let project = projectName {
-                Text(project)
-                    .foregroundStyle(.white.opacity(0.8))
-                    .id("center-project-\(displaySessionId ?? "")")
+            // Latest prompt — always show when available
+            if let prompt = latestPrompt {
+                Text(shortPrompt(prompt))
+                    .foregroundStyle(.white)
+                    .id("prompt-\(displaySessionId ?? "")")
                     .transition(.opacity)
             }
 
             // Tool status or thinking indicator
             if let tool = shownTool {
+                Text("›")
+                    .foregroundStyle(.white.opacity(0.4))
                 TypingIndicator(fontSize: 11, label: tool, bright: true, color: toolStatusColor(tool))
                     .id("tool-\(tool)-\(appState.rotatingSessionId ?? "")")
-                if let desc = shownDesc {
-                    Text(shortDesc(desc))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .truncationMode(.tail)
-                }
             } else if displayStatus == .processing {
-                TypingIndicator(fontSize: 11, label: "thinking", bright: true)
+                TypingIndicator(fontSize: 12, label: "thinking", bright: true)
                     .id("thinking-\(appState.rotatingSessionId ?? "")")
             }
         }
@@ -759,7 +833,7 @@ private struct ApprovalBar: View {
                 if let fp = filePath {
                     Text(fp)
                         .font(.system(size: 9.5, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                         .truncationMode(.head)
                 }
@@ -767,7 +841,7 @@ private struct ApprovalBar: View {
                    let limit = toolInput?["limit"] as? Int {
                     Text("\(L10n.shared["lines"]) \(offset + 1)–\(offset + limit)")
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(.white)
                 }
             }
 
@@ -1916,9 +1990,9 @@ private struct TypingIndicator: View {
     var body: some View {
         if let label {
             let baseColor: Color = color ?? .white
-            let baseOpacity: Double = bright ? 0.6 : 0.35
-            let peakOpacity: Double = bright ? 0.8 : 0.5
-            let midOpacity: Double = bright ? 0.5 : 0.3
+            let baseOpacity: Double = bright ? 1.0 : 0.35
+            let peakOpacity: Double = bright ? 1.0 : 0.5
+            let midOpacity: Double = bright ? 1.0 : 0.3
             let bandWidth: CGFloat = bright ? 80 : 60
             let duration: Double = 2.5
             let endPhase: CGFloat = bright ? 100 : 80

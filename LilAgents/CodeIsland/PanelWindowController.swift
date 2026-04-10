@@ -525,7 +525,7 @@ class PanelWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        if settings.hideWhenNoSession && appState.activeSessionCount == 0 {
+        if settings.hideWhenNoSession && appState.totalSessionCount == 0 {
             panel.orderOut(nil)
             return
         }

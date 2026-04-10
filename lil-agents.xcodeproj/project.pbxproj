@@ -62,12 +62,13 @@
 		DBB30518E61996EE05452B4F /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF26C915125D99FFCDE71A2 /* StatusItemController.swift */; };
 		DECF049C93AE720C3A4F5B96 /* SocketPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE67345EAC792443E8E123F /* SocketPath.swift */; };
 		E19F10A450356C488676C1DB /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B9298F277B3A54A1200649 /* AppDelegate.swift */; };
+		E674E34D2F89343200D4CC6C /* DepartureMono-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = E674E34C2F89343200D4CC6C /* DepartureMono-Regular.otf */; };
 		F1BE24FE1E5CBDC5DFFAE176 /* CopilotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8258265D043F73BE39D24603 /* CopilotView.swift */; };
 		FBD68ACE68C007A5EC2FD848 /* IslandSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85FB447D9ED297D63B3208D5 /* IslandSurface.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		030E66C53E66D7FEACF0F05C /* Resources */ = {isa = PBXFileReference; includeInIndex = 1; name = Resources; path = CodeIsland/Resources; sourceTree = "<group>"; };
+		030E66C53E66D7FEACF0F05C /* Resources */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = Resources; path = CodeIsland/Resources; sourceTree = "<group>"; };
 		091B77F26EA6EB992BDF95B7 /* GeminiView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GeminiView.swift; path = CodeIsland/GeminiView.swift; sourceTree = "<group>"; };
 		09AA0FA884D78787A0445342 /* EventNormalizer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EventNormalizer.swift; path = CodeIslandCore/EventNormalizer.swift; sourceTree = "<group>"; };
 		0B6FCE77EAD8E6F22360E7BB /* ScreenDetector.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScreenDetector.swift; path = CodeIsland/ScreenDetector.swift; sourceTree = "<group>"; };
@@ -122,6 +123,7 @@
 		DEF26C915125D99FFCDE71A2 /* StatusItemController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StatusItemController.swift; path = CodeIsland/StatusItemController.swift; sourceTree = "<group>"; };
 		E228469E96C7C56345F51B65 /* HookServer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HookServer.swift; path = CodeIsland/HookServer.swift; sourceTree = "<group>"; };
 		E2A0FC7F89F9C9AE79835055 /* OpenCodeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OpenCodeView.swift; path = CodeIsland/OpenCodeView.swift; sourceTree = "<group>"; };
+		E674E34C2F89343200D4CC6C /* DepartureMono-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DepartureMono-Regular.otf"; sourceTree = "<group>"; };
 		EB5AD5E87DAA1D40CFED2387 /* Models.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Models.swift; path = CodeIsland/PermissionModels.swift; sourceTree = "<group>"; };
 		EDC38222865DF1E8F69DE28D /* SoundManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SoundManager.swift; path = CodeIsland/SoundManager.swift; sourceTree = "<group>"; };
 		EDF4BFBB4C0F20E46D13C57D /* QoderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = QoderView.swift; path = CodeIsland/QoderView.swift; sourceTree = "<group>"; };
@@ -207,6 +209,7 @@
 				A10000020000000000000025 /* LilAgentsController.swift */,
 				A10000020000000000000002 /* walk-bruce-01.mov */,
 				A10000020000000000000005 /* walk-jazz-01.mov */,
+				E674E34C2F89343200D4CC6C /* DepartureMono-Regular.otf */,
 				A10000020000000000000007 /* Assets.xcassets */,
 				A10000020000000000000010 /* Sounds */,
 				A10000020000000000000003 /* Info.plist */,
@@ -305,6 +308,7 @@
 				A10000010000000000000003 /* walk-jazz-01.mov in Resources */,
 				A10000010000000000000005 /* Assets.xcassets in Resources */,
 				A10000010000000000000010 /* Sounds in Resources */,
+				E674E34D2F89343200D4CC6C /* DepartureMono-Regular.otf in Resources */,
 				5395D57BB2C286926CC91ADD /* Resources in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -89,20 +89,8 @@ final class AppState {
             }
         }
 
-        // 3. Remove idle sessions past timeout (user setting, or 10 min default for no-monitor sessions)
-        let userTimeout = SettingsManager.shared.sessionTimeout
-        let defaultStaleMinutes = 10  // for sessions without process monitor
-        for (key, session) in sessions where session.status == .idle {
-            let idleMinutes = Int(-session.lastActivity.timeIntervalSinceNow / 60)
-            let hasMonitor = processMonitors[key] != nil
-            if userTimeout > 0 && idleMinutes >= userTimeout {
-                // User-configured timeout applies to all sessions
-                removeSession(key)
-            } else if !hasMonitor && idleMinutes >= defaultStaleMinutes {
-                // No process monitor (hook-only sessions): clean up after 10 min idle
-                removeSession(key)
-            }
-        }
+        // 3. 保留空闲会话，方便之后重新展开刘海查看历史会话列表。
+        // 不再因为 idle 自动删除；只在真正的显式清理路径中移除。
         refreshDerivedState()
     }
 
@@ -146,7 +134,10 @@ final class AppState {
             if let lastActivity = self.sessions[sessionId]?.lastActivity,
                lastActivity > exitTime { return }
 
-            self.removeSession(sessionId)
+            self.sessions[sessionId]?.status = .idle
+            self.sessions[sessionId]?.currentTool = nil
+            self.sessions[sessionId]?.toolDescription = nil
+            self.refreshDerivedState()
         }
     }
 

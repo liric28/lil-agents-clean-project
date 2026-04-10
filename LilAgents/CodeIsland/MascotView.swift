@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import CoreText
 
 // MARK: - Mascot Animation Speed Environment
 
@@ -40,9 +42,123 @@ struct MascotView: View {
             case "opencode":
                 OpenCodeView(status: status, size: size)
             default:
-                ClawdView(status: status, size: size)
+//                ClawdView(status: status, size: size)
+                GhostPixelMascotView(status: status, size: size)
             }
         }
         .environment(\.mascotSpeed, Double(speedPct) / 100.0)
+    }
+}
+
+private enum DepartureMonoFont {
+    static let postScriptName = "DepartureMono-Regular"
+    static let displayName = "Departure Mono"
+    private static var registered = false
+
+    static func registerIfNeeded() {
+        guard !registered else { return }
+        defer { registered = true }
+        guard let url = Bundle.main.url(forResource: "DepartureMono-Regular", withExtension: "otf") else { return }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+    }
+}
+
+private struct GhostPixelMascotView: View {
+    let status: AgentStatus
+    var size: CGFloat = 27
+    @Environment(\.mascotSpeed) private var speed
+
+    // pixet fun-ghost matrix
+    private let openMatrix: [[Int]] = [
+        [0,0,1,1,1,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,0,1,1,0,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,0,1,0,0,1,0,1],
+    ]
+
+    private let blinkMatrix: [[Int]] = [
+        [0,0,1,1,1,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,0,1,0,0,1,0,1],
+    ]
+
+    private let colors: [Color] = [
+        Color(red: 0.35, green: 1.0, blue: 0.35),
+        Color(red: 0.25, green: 0.92, blue: 0.32),
+        Color(red: 0.18, green: 0.78, blue: 0.28),
+        Color(red: 0.12, green: 0.62, blue: 0.22),
+    ]
+
+    private func isBlinking(_ t: Double) -> Bool {
+        let cycle = max(3.2, 6.4 / max(speed, 0.45))
+        let phase = t.truncatingRemainder(dividingBy: cycle)
+        return phase > cycle * 0.76 && phase < cycle * 0.86
+    }
+
+    private func isCursorVisible(_ t: Double) -> Bool {
+        let cycle = max(0.42, 0.84 / max(speed, 0.5))
+        return t.truncatingRemainder(dividingBy: cycle) < cycle * 0.48
+    }
+
+    private var cursorBaseOpacity: Double {
+        1
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.04)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let blinking = isBlinking(t)
+            let cursorVisible = isCursorVisible(t)
+            let matrix = blinking ? blinkMatrix : openMatrix
+            let pulse = 1.0
+            // 像素比例
+            let pixel = max(1.5, floor(size / 8.5))
+            let ghostWidth = CGFloat(matrix[0].count) * pixel
+            let ghostHeight = CGFloat(matrix.count) * pixel
+            let cursorHeight = pixel * 5
+
+            HStack(alignment: .center, spacing: 4) {
+                Canvas { context, canvasSize in
+                    let ox = (canvasSize.width - ghostWidth) / 2
+                    let oy = (canvasSize.height - ghostHeight) / 2
+                    for (rowIndex, row) in matrix.enumerated() {
+                        for (colIndex, value) in row.enumerated() {
+                            guard value == 1 else { continue }
+                            let colorIndex = min(colors.count - 1, rowIndex / 2)
+                            let rect = CGRect(
+                                x: ox + CGFloat(colIndex) * pixel,
+                                y: oy + CGFloat(rowIndex) * pixel,
+                                width: pixel,
+                                height: pixel
+                            )
+                            context.fill(Path(roundedRect: rect, cornerRadius: max(1, pixel * 0.16)), with: .color(colors[colorIndex].opacity(pulse)))
+                        }
+                    }
+                }
+                .frame(width: ghostWidth, height: ghostHeight)
+                .shadow(color: colors[0].opacity(0.44), radius: 6)
+                .shadow(color: colors[1].opacity(0.28), radius: 12)
+
+                // 光标闪动
+                Rectangle()
+                    .fill(colors[0])
+                    .frame(width: 4, height: 10)
+                    .shadow(color: colors[0].opacity(0.60), radius: 6)
+                    .opacity(cursorVisible ? cursorBaseOpacity : 0)
+            }
+            .frame(width: ghostWidth + pixel + 4, height: max(ghostHeight, cursorHeight))
+        }
+        .onAppear {
+            DepartureMonoFont.registerIfNeeded()
+        }
     }
 }
