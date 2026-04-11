@@ -45,12 +45,12 @@ struct NotchPanelView: View {
     /// 收起态尽量贴近系统刘海：更薄、更少外扩；展开态保留一点面板感。
     private var shellTopExtension: CGFloat {
         if shouldShowExpanded { return hasNotch ? 8 : 10 }
-        return hasNotch ? 0 : 4
+        return hasNotch ? 0 : 8
     }
 
     private var shellBottomRadius: CGFloat {
         if shouldShowExpanded { return hasNotch ? 20 : 22 }
-        return hasNotch ? 10 : 11
+        return hasNotch ? 10 : 12
     }
 
     private var shellFill: Color {
@@ -79,7 +79,7 @@ struct NotchPanelView: View {
         let extra: CGFloat = appState.status == .idle ? 0 : 20
         // Reserve space for tool status — proportional to screen width
         let toolExtra: CGFloat = displayedToolStatus ? (hasNotch ? screenWidth * 0.03 : screenWidth * 0.04) : 0
-        return notchW + wing * 2 + extra + toolExtra
+        return notchW + wing * 2 + extra + toolExtra  - 100
     }
 
     var body: some View {
@@ -647,6 +647,7 @@ private struct IdleIndicatorBar: View {
             HStack(spacing: 6) {
                 MascotView(source: "claude", status: .idle, size: mascotSize)
 //                    .opacity(hovered ? 0.9 : 0.5)
+                Text("Vibe Island").font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(.white.opacity(0.62)).padding(.leading, 12)
             }
             .padding(.leading, 6)
 
