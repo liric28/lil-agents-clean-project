@@ -50,19 +50,6 @@ struct MascotView: View {
     }
 }
 
-private enum DepartureMonoFont {
-    static let postScriptName = "DepartureMono-Regular"
-    static let displayName = "Departure Mono"
-    private static var registered = false
-
-    static func registerIfNeeded() {
-        guard !registered else { return }
-        defer { registered = true }
-        guard let url = Bundle.main.url(forResource: "DepartureMono-Regular", withExtension: "otf") else { return }
-        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-    }
-}
-
 private struct GhostPixelMascotView: View {
     let status: AgentStatus
     var size: CGFloat = 27

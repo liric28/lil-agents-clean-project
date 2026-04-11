@@ -315,28 +315,31 @@ private struct CompactLeftWing: View {
             if expanded {
                 AppLogoView(size: 36, showBackground: false)
                 if appState.sessions.count > 1 {
-                    HStack(spacing: 1) {
-                        ForEach([("all", "ALL"), ("status", "STA"), ("cli", "CLI")], id: \.0) { tag, label in
-                            let selected = groupingMode == tag
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.15)) { groupingMode = tag }
-                            } label: {
-                                PixelText(
-                                    text: label,
-                                    color: selected ? Color(red: 0.3, green: 0.85, blue: 0.4) : .white.opacity(0.3),
-                                    pixelSize: 1.3
-                                )
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Rectangle().fill(selected ? .white.opacity(0.1) : .clear)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    GroupingModeButtons(groupingMode: groupingMode) { newMode in
+                        withAnimation(.easeInOut(duration: 0.15)) { groupingMode = newMode }
                     }
-                    .background(Rectangle().fill(.white.opacity(0.05)))
-                    .overlay(Rectangle().stroke(.white.opacity(0.1), lineWidth: 1))
+//                    HStack(spacing: 1) {
+//                        ForEach([("all", "ALL"), ("status", "STA"), ("cli", "CLI")], id: \.0) { tag, label in
+//                            let selected = groupingMode == tag
+//                            Button {
+//                                withAnimation(.easeInOut(duration: 0.15)) { groupingMode = tag }
+//                            } label: {
+//                                PixelText(
+//                                    text: label,
+//                                    color: selected ? Color(red: 0.3, green: 0.85, blue: 0.4) : .white.opacity(0.3),
+//                                    pixelSize: 1.3
+//                                )
+//                                .padding(.horizontal, 5)
+//                                .padding(.vertical, 4)
+//                                .background(
+//                                    Rectangle().fill(selected ? .white.opacity(0.1) : .clear)
+//                                )
+//                            }
+//                            .buttonStyle(.plain)
+//                        }
+//                    }
+//                    .background(Rectangle().fill(.white.opacity(0.05)))
+//                    .overlay(Rectangle().stroke(.white.opacity(0.1), lineWidth: 1))
                 }
             } else {
 //                MascotView(source: "claude", status: .idle, size: mascotSize)
@@ -405,6 +408,44 @@ private struct CompactNotchSessionTitle: View {
             }
         }
         .frame(width: notchWidth)
+    }
+}
+
+// MARK: - Grouping Mode Buttons (DepartureMono-Regular font)
+
+private struct GroupingModeButtons: View {
+    let groupingMode: String
+    let onSelect: (String) -> Void
+
+    private let options: [(tag: String, label: String)] = [
+        ("all", "ALL"),
+        ("status", "STA"),
+        ("cli", "CLI"),
+    ]
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(options, id: \.tag) { option in
+                let selected = groupingMode == option.tag
+                Button {
+                    onSelect(option.tag)
+                } label: {
+                    DepartureMonoText(
+                        text: option.label,
+                        color: selected ? Color(red: 0.3, green: 0.85, blue: 0.4) : .white.opacity(0.3),
+                        size: 11
+                    )
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(
+                        Rectangle().fill(selected ? .white.opacity(0.1) : .clear)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(Rectangle().fill(.white.opacity(0.05)))
+        .overlay(Rectangle().stroke(.white.opacity(0.1), lineWidth: 1))
     }
 }
 
@@ -1839,6 +1880,33 @@ private struct TerminalJumpButton: View {
         .onHover { h in
             withAnimation(.easeOut(duration: 0.15)) { hovering = h }
         }
+    }
+}
+
+// MARK: - Departure Mono Font & Text
+
+enum DepartureMonoFont {
+    static let postScriptName = "DepartureMono-Regular"
+    static let displayName = "Departure Mono"
+    private static var registered = false
+
+    static func registerIfNeeded() {
+        guard !registered else { return }
+        defer { registered = true }
+        guard let url = Bundle.main.url(forResource: "DepartureMono-Regular", withExtension: "otf") else { return }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+    }
+}
+
+struct DepartureMonoText: View {
+    let text: String
+    var color: Color = .white
+    var size: CGFloat = 11
+
+    var body: some View {
+        Text(text)
+            .font(.custom(DepartureMonoFont.postScriptName, size: size))
+            .foregroundStyle(color)
     }
 }
 
