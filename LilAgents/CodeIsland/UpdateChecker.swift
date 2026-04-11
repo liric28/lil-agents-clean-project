@@ -6,7 +6,7 @@ import os.log
 final class UpdateChecker: ObservableObject {
     static let shared = UpdateChecker()
     private static let log = Logger(subsystem: "com.codeisland", category: "UpdateChecker")
-    private let repo = "wxtsky/CodeIsland"
+    private let repo = "liric28/lil-agents-clean-project"
 
     @Published var isDownloading = false
 
@@ -194,8 +194,8 @@ final class UpdateChecker: ObservableObject {
         defer { isDownloading = false }
 
         let tempDir = NSTemporaryDirectory()
-        let dmgPath = tempDir + "CodeIsland-update.dmg"
-        let mountPoint = "/tmp/codeisland-update-mount"
+        let dmgPath = tempDir + "lil-agents-clean-project-update.dmg"
+        let mountPoint = "/tmp/lil-agents-clean-project-update-mount"
 
         do {
             // 1. Download DMG
@@ -211,7 +211,7 @@ final class UpdateChecker: ObservableObject {
             )
             Self.log.debug("hdiutil attach output: \(attachOutput)")
 
-            // 3. Find CodeIsland.app in mounted volume
+            // 3. Find lil-agents-clean-project.app in mounted volume
             let fm = FileManager.default
             guard let contents = try? fm.contentsOfDirectory(atPath: mountPoint),
                   let appName = contents.first(where: { $0.hasSuffix(".app") }) else {

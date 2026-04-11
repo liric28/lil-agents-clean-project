@@ -478,12 +478,12 @@ private struct CompactRightWing: View {
     var body: some View {
         HStack(spacing: 6) {
             if expanded {
-                NotchIconButton(icon: soundEnabled ? "speaker.wave.2" : "speaker.slash", tooltip: soundEnabled ? l10n["mute"] : l10n["enable_sound_tooltip"]) {
-                    soundEnabled.toggle()
-                }
-                NotchIconButton(icon: "gearshape", tooltip: l10n["settings"]) {
-                    SettingsWindowController.shared.show()
-                }
+//                NotchIconButton(icon: soundEnabled ? "speaker.wave.2" : "speaker.slash", tooltip: soundEnabled ? l10n["mute"] : l10n["enable_sound_tooltip"]) {
+//                    soundEnabled.toggle()
+//                }
+//                NotchIconButton(icon: "gearshape", tooltip: l10n["settings"]) {
+//                    SettingsWindowController.shared.show()
+//                }
                 NotchIconButton(icon: "power", tint: Color(red: 1.0, green: 0.4, blue: 0.4), tooltip: l10n["quit"]) {
                     NSApplication.shared.terminate(nil)
                 }
@@ -711,12 +711,12 @@ private struct IdleIndicatorBar: View {
                         .foregroundStyle(.white.opacity(0.4))
 
                     HStack(spacing: 4) {
-                        NotchIconButton(icon: soundEnabled ? "speaker.wave.2" : "speaker.slash", tooltip: soundEnabled ? l10n["mute"] : l10n["enable_sound_tooltip"]) {
-                            soundEnabled.toggle()
-                        }
-                        NotchIconButton(icon: "gearshape", tooltip: l10n["settings"]) {
-                            SettingsWindowController.shared.show()
-                        }
+//                        NotchIconButton(icon: soundEnabled ? "speaker.wave.2" : "speaker.slash", tooltip: soundEnabled ? l10n["mute"] : l10n["enable_sound_tooltip"]) {
+//                            soundEnabled.toggle()
+//                        }
+//                        NotchIconButton(icon: "gearshape", tooltip: l10n["settings"]) {
+//                            SettingsWindowController.shared.show()
+//                        }
                         NotchIconButton(icon: "power", tint: Color(red: 1.0, green: 0.4, blue: 0.4), tooltip: l10n["quit"]) {
                             NSApplication.shared.terminate(nil)
                         }

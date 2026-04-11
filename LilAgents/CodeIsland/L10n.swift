@@ -245,7 +245,7 @@ final class L10n: ObservableObject {
         "shortcut_recording": "请按下快捷键…",
         "shortcut_none": "未设置",
         "shortcut_togglePanel": "切换面板",
-        "shortcut_togglePanel_desc": "展开或收起 CodeIsland 面板",
+        "shortcut_togglePanel_desc": "展开或收起面板",
         "shortcut_approve": "批准",
         "shortcut_approve_desc": "批准当前权限请求",
         "shortcut_approveAlways": "始终批准",
@@ -309,7 +309,7 @@ final class L10n: ObservableObject {
         "tool_or_api_error": "工具失败或 API 错误",
         "system_section": "系统",
         "boot_sound": "启动音效",
-        "boot_sound_desc": "CodeIsland 启动时播放提示音",
+        "boot_sound_desc": "启动时播放提示音",
         "interaction": "交互",
         "approval_needed": "需要审批",
         "waiting_approval_desc": "等待权限审批或回答问题",
@@ -333,7 +333,7 @@ final class L10n: ObservableObject {
         "about_desc2": "通过 Unix socket IPC 支持 8 种 CLI/IDE 工具",
 
         // Window
-        "settings_title": "CodeIsland 设置",
+        "settings_title": "设置",
 
         // Menu
         "settings_ellipsis": "设置...",

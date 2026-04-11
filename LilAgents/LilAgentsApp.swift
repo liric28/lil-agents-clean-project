@@ -118,10 +118,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(displayItem)
 
         menu.addItem(NSMenuItem.separator())
+        
+        let settingItem = NSMenuItem(title: "Setting", action: #selector(setting), keyEquivalent: "")
+        menu.addItem(settingItem)
 
-        let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
-        updateItem.target = updaterController
-        menu.addItem(updateItem)
+//        let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+//        updateItem.target = updaterController
+//        menu.addItem(updateItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -129,6 +132,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
+    }
+    
+    @MainActor @objc func setting() {
+        SettingsWindowController.shared.show()
     }
 
     // MARK: - Menu Actions

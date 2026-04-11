@@ -79,7 +79,7 @@ struct SettingsDefaults {
     static let aiMessageLines = 1
     static let showAgentDetails = false
 
-    static let soundEnabled = false
+    static let soundEnabled = true
     static let soundVolume = 50
     static let soundSessionStart = true
     static let soundTaskComplete = true

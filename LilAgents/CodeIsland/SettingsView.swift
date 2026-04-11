@@ -47,8 +47,8 @@ private struct SidebarGroup: Hashable {
 }
 
 private let sidebarGroups: [SidebarGroup] = [
-    SidebarGroup(title: nil, pages: [.general, .behavior, .appearance, .mascots, .sound, .shortcuts]),
-    SidebarGroup(title: "CodeIsland", pages: [.hooks, .about]),
+    SidebarGroup(title: nil, pages: [.general, .behavior, .appearance, .mascots, .sound, .shortcuts, .hooks]),
+//    SidebarGroup(title: "Vibe Island", pages: [.hooks, .about]),
 ]
 
 // MARK: - Main View
@@ -767,7 +767,7 @@ private struct AboutPage: View {
                 AppLogoView(size: 100)
 
                 VStack(spacing: 6) {
-                    Text("CodeIsland")
+                    Text("Vibe Island")
                         .font(.system(size: 26, weight: .bold))
                     Text("Version \(AppVersion.current)")
                         .font(.system(size: 13))
@@ -784,8 +784,8 @@ private struct AboutPage: View {
                 }
 
                 HStack(spacing: 12) {
-                    aboutLink("GitHub", icon: "chevron.left.forwardslash.chevron.right", url: "https://github.com/wxtsky/CodeIsland")
-                    aboutLink("Issues", icon: "ladybug", url: "https://github.com/wxtsky/CodeIsland/issues")
+                    aboutLink("GitHub", icon: "chevron.left.forwardslash.chevron.right", url: "https://github.com/liric28/lil-agents-clean-project")
+                    aboutLink("Issues", icon: "ladybug", url: "https://github.com/liric28/lil-agents-clean-project/issues")
                 }
 
                 Button {
