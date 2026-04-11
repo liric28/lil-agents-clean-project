@@ -11,6 +11,8 @@ final class AppState {
     var activeSessionId: String?
     var permissionQueue: [PermissionRequest] = []
     var questionQueue: [QuestionRequest] = []
+    /// 当为 true 时，所有权限请求都会被自动批准，不弹 UI
+    var autoApproveAllMode: Bool = false
 
     /// Computed: first item in permission queue (backward compat for UI reads)
     var pendingPermission: PermissionRequest? { permissionQueue.first }
@@ -574,6 +576,13 @@ final class AppState {
 
         showNextPending()
         refreshDerivedState()
+    }
+    
+    func approveAutoPermission() {
+        // 开启自动批准模式，之后所有权限请求都直接放行
+        autoApproveAllMode = true
+        // 同时批准当前这条待处理的权限请求
+        approvePermission(always: false)
     }
 
     func denyPermission() {

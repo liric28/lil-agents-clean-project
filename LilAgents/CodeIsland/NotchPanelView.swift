@@ -13,19 +13,19 @@ struct NotchPanelView: View {
     @AppStorage(SettingsKey.hideWhenNoSession) private var hideWhenNoSession = SettingsDefaults.hideWhenNoSession
     @AppStorage(SettingsKey.showToolStatus) private var showToolStatus = SettingsDefaults.showToolStatus
 
-    /// Delayed hover: prevents accidental expansion when mouse passes through
+    /// 延迟悬停：防止鼠标经过时意外展开
     @State private var hoverTimer: Timer?
     @State private var idleHovered = false
     @State private var displayedToolStatus: Bool = SettingsDefaults.showToolStatus
     @State private var compactBarExpanded = false
 
     private var isActive: Bool { !appState.sessions.isEmpty || appState.collapsingAfterDelete }
-    /// First launch / no-session state should still render a visible marker so the app
-    /// doesn't disappear completely behind the physical notch.
+    /// 首次启动/无会话状态仍应渲染一个可见标记，
+    /// /// 这样应用就不会在物理刘海后面完全消失。
     private var showIdleIndicator: Bool {
         !isActive && !hideWhenNoSession
     }
-    /// Whether the bar content should be visible (respects hideWhenNoSession)
+    /// 栏内容是否应该可见（遵循 hideWhenNoSession 设置）
     private var showBar: Bool {
         if appState.collapsingAfterDelete { return true }
         return isActive && !(hideWhenNoSession && appState.totalSessionCount == 0)
@@ -34,11 +34,11 @@ struct NotchPanelView: View {
         showBar && appState.surface.isExpanded
     }
 
-    /// Mascot size — fits within the menu bar height
+    /// 吉祥物尺寸——适应菜单栏高度
     private var mascotSize: CGFloat { min(16, notchHeight - 6) }
 
-    /// Minimum wing width needed to display compact bar content
-    /// Ghost mascot includes a terminal cursor to the right, so it needs more than a square box.
+    /// 显示紧凑栏内容所需的最小翼宽
+    /// 幽灵吉祥物右侧包含终端光标，所以需要比方形更大的空间。
     private var compactWingWidth: CGFloat { max(mascotSize + 14, mascotSize * 1.9) }
 
     /// 用户指定：收起态刘海长度固定 142pt，并做成纯黑硬件刘海感。
@@ -72,7 +72,7 @@ struct NotchPanelView: View {
         shouldShowExpanded ? 0.12 : 0
     }
 
-    /// Total panel width — adapts based on state and screen geometry
+    /// 总面板宽度——根据状态和屏幕几何自适应
     private var panelWidth: CGFloat {
         if showIdleIndicator { return idleHovered ? collapsedNotchWidth + 40 : collapsedNotchWidth }
         if !isActive { return 0 }
@@ -130,7 +130,7 @@ struct NotchPanelView: View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
                 if showBar {
-                    // Active: compact bar — wider version when expanded
+                    // 活跃状态：紧凑栏——展开时更宽
                     HStack(spacing: 0) {
                         CompactLeftWing(appState: appState, expanded: shouldShowExpanded, mascotSize: mascotSize, hasNotch: hasNotch, showToolStatus: showToolStatus)
                         if hasNotch && !shouldShowExpanded {
@@ -154,12 +154,12 @@ struct NotchPanelView: View {
                         hovered: idleHovered
                     )
                 } else {
-                    // Idle: just the notch shell
+                    // 空闲状态：只有刘海外壳
                     Spacer()
                         .frame(height: notchHeight)
                 }
 
-                // Below-notch expanded content
+                // 刘海下方的展开内容
                 if shouldShowExpanded {
                     Line()
                         .stroke(.white.opacity(0.08), lineWidth: 0.5)
@@ -176,7 +176,8 @@ struct NotchPanelView: View {
                                 queueTotal: appState.permissionQueue.count,
                                 onAllow: { appState.approvePermission(always: false) },
                                 onAlwaysAllow: { appState.approvePermission(always: true) },
-                                onDeny: { appState.denyPermission() }
+                                onAutoAllow: { appState.approveAutoPermission()},
+                                onDeny: { appState.denyPermission() },
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
                         }
@@ -268,7 +269,7 @@ struct NotchPanelView: View {
             .onAppear { displayedToolStatus = showToolStatus }
             .contentShape(Rectangle())
             .onHover { hovering in
-                // Idle indicator hover
+                // 空闲指示器悬停
                 if showIdleIndicator {
                     withAnimation(NotchAnimation.micro) { idleHovered = hovering }
                     return
@@ -276,11 +277,11 @@ struct NotchPanelView: View {
                 switch appState.surface {
                 case .approvalCard, .questionCard: return
                 case .completionCard:
-                    // Completion card: mark entered on hover-in, block collapse until entered
+                    // 完成卡片：悬停进入时标记，进入前阻止折叠
                     if hovering {
                         appState.completionHasBeenEntered = true
                     } else if appState.completionHasBeenEntered {
-                        // Mouse entered then left — allow collapse
+                        // 鼠标进入后离开——允许折叠
                         hoverTimer?.invalidate()
                         hoverTimer = nil
                         withAnimation(NotchAnimation.close) {
@@ -291,9 +292,9 @@ struct NotchPanelView: View {
                     return
                 default: break
                 }
-                // Respect collapseOnMouseLeave setting
+                // 遵循 collapseOnMouseLeave 设置
                 if !hovering && !SettingsManager.shared.collapseOnMouseLeave { return }
-                // Smart suppress: don't auto-expand when active session's terminal is foreground
+                // 智能抑制：活跃会话终端在前景时不自动展开
                 if hovering && smartSuppress {
                     if let pc = CodeIslandAppDelegate.shared.panelController,
                        pc.isActiveTerminalForeground() {
@@ -302,7 +303,7 @@ struct NotchPanelView: View {
                 }
 
                 if hovering {
-                    // Delay expansion to avoid accidental triggers
+                    // 延迟展开以避免意外触发
                     hoverTimer?.invalidate()
                     hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
                         Task { @MainActor in
@@ -316,7 +317,7 @@ struct NotchPanelView: View {
                         }
                     }
                 } else {
-                    // Collapse with brief delay to prevent flicker on accidental mouse-out
+                    // 短暂延迟后折叠以防止鼠标意外移出时闪烁
                     hoverTimer?.invalidate()
                     hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { _ in
                         Task { @MainActor in
@@ -337,9 +338,9 @@ struct NotchPanelView: View {
 }
 
 
-// MARK: - Compact Wings (notch-level, 32px height)
+// MARK: - 紧凑翼（刘海高度，32px）
 
-/// Left side: pixel character + status info
+/// 左侧：像素角色 + 状态信息
 private struct CompactLeftWing: View {
     var appState: AppState
     let expanded: Bool
@@ -424,7 +425,7 @@ private struct CompactLeftWing: View {
                 }
             }
         }
-        // Session rotation: immediately sync tool to avoid stale linger from previous session
+        // 会话轮换：立即同步工具，避免上一个会话的残留
         .onChange(of: appState.rotatingSessionId) { _, _ in
             lingerTimer?.invalidate()
             let newTool = liveTool
@@ -464,7 +465,7 @@ private struct CompactNotchSessionTitle: View {
     }
 }
 
-// MARK: - Grouping Mode Buttons (DepartureMono-Regular font)
+// MARK: - 分组模式按钮（DepartureMono-Regular 字体）
 
 private struct GroupingModeButtons: View {
     let groupingMode: String
@@ -476,7 +477,7 @@ private struct GroupingModeButtons: View {
         ("cli", "CLI"),
     ]
 
-    /// Button height from vertical padding (4+4=8) + text baseline
+    /// 按钮高度来自垂直内边距（4+4=8）+ 文本基线
     private let buttonHeight: CGFloat = 20
 
     var body: some View {
@@ -510,7 +511,7 @@ private struct GroupingModeButtons: View {
     }
 }
 
-/// Right side: project name + session count (detailed) or just count (simple)
+/// 右侧：项目名 + 会话数量（详细模式）或仅数量（简单模式）
 private struct CompactRightWing: View {
     var appState: AppState
     let expanded: Bool
@@ -540,7 +541,7 @@ private struct CompactRightWing: View {
                     NSApplication.shared.terminate(nil)
                 }
             } else {
-                // Pending approval/question badge
+                // 待批准/待回复徽章
                 if appState.status == .waitingApproval || appState.status == .waitingQuestion {
                     Image(systemName: "bell.fill")
                         .font(.system(size: 9, weight: .bold))
@@ -549,7 +550,7 @@ private struct CompactRightWing: View {
                 }
 
                 if showToolStatus {
-                    // Detailed mode: session count (project name is shown in center on non-notch)
+                    // 详细模式：会话数量（非刘海屏幕上项目名显示在中间）
                     HStack(spacing: 1) {
                         let active = appState.activeSessionCount
                         let total = appState.totalSessionCount
@@ -585,9 +586,9 @@ private struct CompactRightWing: View {
     }
 }
 
-// MARK: - Tool Status Helpers
+// MARK: - 工具状态辅助
 
-/// Accent color for each tool category — shared between notch and non-notch views
+/// 每个工具类别的强调色——刘海和非刘海视图共用
 private func toolStatusColor(_ tool: String) -> Color {
     switch tool.lowercased() {
     case "bash": return Color(red: 0.4, green: 1.0, blue: 0.5)
@@ -599,14 +600,14 @@ private func toolStatusColor(_ tool: String) -> Color {
     }
 }
 
-// MARK: - Compact Tool Status (non-notch center area)
+// MARK: - 紧凑工具状态（非刘海中间区域）
 
-/// Shows the current tool activity in the center of the bar on non-notch screens.
-/// Keeps the last tool visible for a short linger period to avoid flashing.
+/// 在非刘海屏幕的栏中央显示当前工具活动。
+/// 保持上一个工具短时可见，避免闪烁。
 private struct CompactToolStatus: View {
     var appState: AppState
 
-    /// Single source of truth: all fields derive from the same session.
+    /// 单一数据源：所有字段都派生自同一会话。
     private var displaySessionId: String? {
         appState.rotatingSessionId ?? appState.activeSessionId ?? appState.sessions.keys.sorted().first
     }
@@ -627,7 +628,7 @@ private struct CompactToolStatus: View {
     @State private var shownDesc: String?
     @State private var lingerTimer: Timer?
 
-    /// Extract meaningful part of description — file paths show last component
+    /// 提取描述的有意义部分——文件路径只显示最后一部分
     private func shortDesc(_ desc: String) -> String {
         let trimmed = desc.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.contains("/") {
@@ -636,7 +637,7 @@ private struct CompactToolStatus: View {
         return trimmed
     }
 
-    /// Truncate prompt to fit display
+    /// 截断 prompt 以适应显示
     private func shortPrompt(_ prompt: String) -> String {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.count > 40 {
@@ -645,12 +646,12 @@ private struct CompactToolStatus: View {
         return trimmed
     }
 
-    /// Whether there's any activity worth showing (tool running or thinking)
+    /// 是否有值得显示的活动（工具运行中或思考中）
     private var hasActivity: Bool { shownTool != nil || displayStatus == .processing }
 
     var body: some View {
         HStack(spacing: 5) {
-            // Latest prompt — always show when available
+            // 最新 prompt——有就始终显示
             if let prompt = latestPrompt {
                 Text(shortPrompt(prompt))
                     .foregroundStyle(.white)
@@ -663,7 +664,7 @@ private struct CompactToolStatus: View {
                     .transition(.opacity)
             }
 
-            // Tool status or thinking indicator
+            // 工具状态 or thinking indicator
             if let tool = shownTool {
                 Text("›")
                     .foregroundStyle(.white.opacity(0.4))
@@ -699,7 +700,7 @@ private struct CompactToolStatus: View {
         .onChange(of: liveDesc) { _, newDesc in
             if liveTool != nil { shownDesc = newDesc }
         }
-        // Session rotation: immediately sync to avoid stale linger from previous session
+        // 会话轮换：立即同步以避免上一个会话的残留
         .onChange(of: appState.rotatingSessionId) { _, _ in
             lingerTimer?.invalidate()
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -736,7 +737,7 @@ private struct NotchIconButton: View {
     }
 }
 
-// MARK: - Idle Indicator Bar
+// MARK: - 空闲指示栏
 
 private struct IdleIndicatorBar: View {
     let mascotSize: CGFloat
@@ -750,7 +751,7 @@ private struct IdleIndicatorBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left: mascot 刘海左边像素 ghost
+            // 左侧：吉祥物 刘海左边像素 ghost
             HStack(spacing: 6) {
                 MascotView(source: "claude", status: .idle, size: mascotSize)
 //                    .opacity(hovered ? 0.9 : 0.5)
@@ -760,7 +761,7 @@ private struct IdleIndicatorBar: View {
 
             Spacer(minLength: hasNotch ? notchW : 0)
 
-            // Right: expanded shows text + buttons, collapsed shows nothing
+            // 右侧：展开时显示文字+按钮，折叠时不显示
             if hovered {
                 HStack(spacing: 8) {
                     Text("0")
@@ -788,7 +789,7 @@ private struct IdleIndicatorBar: View {
     }
 }
 
-// MARK: - Approval Bar (below notch, auto-expanded)
+// MARK: - Approval Bar（刘海下方，自动展开）
 
 private struct ApprovalBar: View {
     let tool: String
@@ -797,6 +798,7 @@ private struct ApprovalBar: View {
     let queueTotal: Int
     let onAllow: () -> Void
     let onAlwaysAllow: () -> Void
+    let onAutoAllow: () -> Void
     let onDeny: () -> Void
 
     private var fileName: String? {
@@ -814,7 +816,7 @@ private struct ApprovalBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Tool name + file context
+            // 工具名称 + 文件上下文
             HStack(spacing: 6) {
                 Text("!")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -845,7 +847,7 @@ private struct ApprovalBar: View {
             }
             .padding(.horizontal, 14)
 
-            // Tool-specific detail view
+            // 工具特定的详情视图
             if toolInput != nil {
                 toolDetailView
                     .padding(.horizontal, 14)
@@ -854,11 +856,12 @@ private struct ApprovalBar: View {
                     .background(Color.white.opacity(0.04))
             }
 
-            // Pixel-style buttons
+            // 批准按钮
             HStack(spacing: 6) {
-                PixelButton(label: L10n.shared["deny"], fg: .white.opacity(0.95), bg: Color(red: 0.45, green: 0.12, blue: 0.12), border: Color(red: 0.7, green: 0.25, blue: 0.25), action: onDeny)
-                PixelButton(label: L10n.shared["allow_once"], fg: .white.opacity(0.95), bg: Color(red: 0.16, green: 0.38, blue: 0.18), border: Color(red: 0.28, green: 0.62, blue: 0.32), action: onAllow)
-                PixelButton(label: L10n.shared["always"], fg: .white.opacity(0.95), bg: Color(red: 0.14, green: 0.28, blue: 0.52), border: Color(red: 0.28, green: 0.48, blue: 0.82), action: onAlwaysAllow)
+                PixelButton(label: L10n.shared["deny"], fg: .white.opacity(1), bg: Color(red: 64/255, green: 64/255, blue: 64/255), border: Color.clear, action: onDeny)
+                PixelButton(label: L10n.shared["allow_once"], fg: Color(red: 24/255, green: 24/255, blue: 24/255).opacity(1), bg: Color(red: 233/255, green: 233/255, blue: 233/255), border: Color.clear, action: onAllow)
+                PixelButton(label: L10n.shared["always"], fg: .white.opacity(1), bg: Color.blue, border: Color.clear, action: onAlwaysAllow)
+                PixelButton(label: L10n.shared["auto_allow"], fg: .white.opacity(1), bg: Color.red, border: Color.clear, action: onAutoAllow)
             }
             .padding(.horizontal, 14)
         }
@@ -869,7 +872,7 @@ private struct ApprovalBar: View {
     private var toolDetailView: some View {
         switch tool {
         case "Bash":
-            // Show command as a terminal prompt
+            // 显示为终端提示符格式的命令
             VStack(alignment: .leading, spacing: 2) {
                 if let cmd = toolInput?["command"] as? String {
                     HStack(alignment: .top, spacing: 4) {
@@ -885,7 +888,7 @@ private struct ApprovalBar: View {
             }
 
         case "Edit":
-            // Show diff style: - old / + new
+            // 以 diff 格式显示：- 旧内容 / + 新内容
             VStack(alignment: .leading, spacing: 3) {
                 if let fp = filePath {
                     Text(fp)
@@ -919,7 +922,7 @@ private struct ApprovalBar: View {
             }
 
         case "Write":
-            // Show file path + content preview
+            // 显示文件路径 + 内容预览
             VStack(alignment: .leading, spacing: 3) {
                 if let fp = filePath {
                     Text(fp)
@@ -937,7 +940,7 @@ private struct ApprovalBar: View {
             }
 
         case "Read":
-            // Show file path + line range
+            // 显示文件路径 + 行范围
             VStack(alignment: .leading, spacing: 2) {
                 if let fp = filePath {
                     Text(fp)
@@ -955,7 +958,7 @@ private struct ApprovalBar: View {
             }
 
         case "Grep":
-            // Show pattern + optional path
+            // 显示模式 + 可选路径
             VStack(alignment: .leading, spacing: 2) {
                 if let pattern = toolInput?["pattern"] as? String {
                     HStack(alignment: .top, spacing: 4) {
@@ -978,7 +981,7 @@ private struct ApprovalBar: View {
             }
 
         case "Glob":
-            // Show glob pattern
+            // 显示 glob 模式
             VStack(alignment: .leading, spacing: 2) {
                 if let pattern = toolInput?["pattern"] as? String {
                     Text(pattern)
@@ -996,7 +999,7 @@ private struct ApprovalBar: View {
             }
 
         default:
-            // Generic: show all key-value pairs
+            // 通用：显示所有键值对
             VStack(alignment: .leading, spacing: 2) {
                 if let input = toolInput {
                     ForEach(Array(input.keys.sorted().prefix(4)), id: \.self) { key in
@@ -1017,7 +1020,7 @@ private struct ApprovalBar: View {
     }
 }
 
-// MARK: - Question Bar (below notch, auto-expanded)
+// MARK: - Question Bar（刘海下方，自动展开）
 
 private struct QuestionBar: View {
     let question: String
@@ -1038,7 +1041,7 @@ private struct QuestionBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Session context
+            // 会话上下文
             if sessionSource != nil || sessionContext != nil {
                 HStack(spacing: 5) {
                     if let src = sessionSource, let icon = cliIcon(source: src, size: 12) {
@@ -1059,7 +1062,7 @@ private struct QuestionBar: View {
                 .padding(.horizontal, 14)
             }
 
-            // Header
+            // 标题
             HStack(spacing: 6) {
                 Text("?")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -1081,7 +1084,7 @@ private struct QuestionBar: View {
             }
             .padding(.horizontal, 14)
 
-            // Options
+            // 选项
             if let options = options, !options.isEmpty {
                 VStack(spacing: 4) {
                     ForEach(Array(options.enumerated()), id: \.offset) { idx, option in
@@ -1094,7 +1097,7 @@ private struct QuestionBar: View {
                 }
                 .padding(.horizontal, 14)
             } else {
-                // Text input
+                // 文本输入
                 HStack(spacing: 6) {
                     Text(">")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -1119,7 +1122,7 @@ private struct QuestionBar: View {
                 .padding(.horizontal, 14)
             }
 
-            // Skip button
+            // 跳过按钮
             HStack(spacing: 6) {
                 PixelButton(
                     label: L10n.shared["skip"],
@@ -1145,7 +1148,7 @@ private struct QuestionBar: View {
     }
 }
 
-// MARK: - Option Row
+// MARK: - 选项行
 
 private struct OptionRow: View {
     let index: Int
@@ -1159,16 +1162,16 @@ private struct OptionRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                // Selector arrow
+                // 选择箭头
                 Text(hovering ? "▸" : " ")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(accent)
                     .frame(width: 10)
-                // Number
+                // 编号
                 Text("\(index).")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .foregroundStyle(accent.opacity(hovering ? 1 : 0.6))
-                // Label + Description
+                // 标签 + 描述
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
                         .font(.system(size: 10.5, weight: hovering ? .semibold : .regular, design: .monospaced))
@@ -1209,13 +1212,13 @@ private struct PixelButton: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(fg)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
                 .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(hovering ? bg.opacity(1.5) : bg)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(hovering ? bg.opacity(0.9) : bg)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
@@ -1227,11 +1230,11 @@ private struct PixelButton: View {
     }
 }
 
-// MARK: - Session List
+// MARK: - 会话列表
 
 private struct SessionListView: View {
     var appState: AppState
-    /// When set, only show this session (auto-expand on completion)
+    /// 设置后只显示这个会话（完成时自动展开）
     var onlySessionId: String? = nil
     @AppStorage(SettingsKey.sessionGroupingMode) private var groupingMode = SettingsDefaults.sessionGroupingMode
     @AppStorage(SettingsKey.maxVisibleSessions) private var maxVisibleSessions = SettingsDefaults.maxVisibleSessions
@@ -1299,7 +1302,7 @@ private struct SessionListView: View {
     }
 
     var body: some View {
-        // Compute once per render — groupedSessions, totalCount, needsScroll
+        // 每次渲染计算一次——groupedSessions、totalCount、needsScroll
         let groups = groupedSessions
         let totalSessionCount = groups.reduce(0) { $0 + $1.ids.count }
         let needsScroll = onlySessionId == nil && totalSessionCount > maxVisibleSessions
@@ -1368,7 +1371,7 @@ private struct SessionListView: View {
     }
 }
 
-/// Thin overlay scrollbar via NSScrollView — ignores system "show scrollbar" preference.
+/// 通过 NSScrollView 实现细覆盖滚动条——忽略系统"显示滚动条"偏好。
 private struct ThinScrollView<Content: View>: NSViewRepresentable {
     let maxHeight: CGFloat
     @ViewBuilder let content: Content
@@ -1547,13 +1550,13 @@ private struct SessionCard: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            // Column 1: Character + subagent icons
+            // 第1列：角色 + 子 agent 图标
             VStack(spacing: 3) {
 //                MascotView(source: "claude", status: .idle, size: 32)
                 MascotView(source: session.source, status: session.status, size: 24)
                 if showAgentDetails && !session.subagents.isEmpty {
                     let sorted = session.subagents.values.sorted { $0.startTime < $1.startTime }
-                    // Grid: 4 per row, 8px icons
+                    // 网格：每行4个，8px 图标
                     let rows = stride(from: 0, to: sorted.count, by: 4).map {
                         Array(sorted[$0..<min($0 + 4, sorted.count)])
                     }
@@ -1570,9 +1573,9 @@ private struct SessionCard: View {
             }
             .frame(width: 36)
 
-            // Column 2: Content
+            // 第2列：内容
             VStack(alignment: .leading, spacing: 6) {
-                // Header: project name + optional session label + short ID
+                // 标题：项目名 + 可选会话标签 + 短 ID
                 HStack(alignment: .center, spacing: 8) {
                     SessionIdentityLine(
                         session: session,
@@ -1604,7 +1607,7 @@ private struct SessionCard: View {
                     }
                 }
 
-                // Session title: first user prompt (hide when detailed mode shows chat history)
+                // 会话标题：第一个用户 prompt（详细模式显示聊天历史时隐藏）
                 if let prompt = session.lastUserPrompt,
                    session.recentMessages.isEmpty {
                     Text(prompt)
@@ -1614,10 +1617,10 @@ private struct SessionCard: View {
                         .truncationMode(.tail)
                 }
 
-            // Chat history + live status
+            // 聊天历史 + 实时状态
             if !session.recentMessages.isEmpty || session.status != .idle {
                 VStack(alignment: .leading, spacing: 3) {
-                    // Chat messages (detailed mode only)
+                    // 聊天消息（仅详细模式）
                     let visibleMessages = session.status != .idle
                         ? Array(session.recentMessages.suffix(2))
                         : session.recentMessages
@@ -1647,7 +1650,7 @@ private struct SessionCard: View {
                         }
                     }
 
-                    // Working indicator: show what AI is doing right now
+                    // 工作指示器：显示 AI 当前在做什么
                     if session.status != .idle {
                         HStack(spacing: 4) {
                             Text("$")
@@ -1685,12 +1688,12 @@ private struct SessionCard: View {
         }
     }
 
-    /// Collapse consecutive blank lines and trim leading/trailing whitespace
+    /// 合并连续空行并去除首尾空白
     private func compactText(_ text: String) -> String {
         text.components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .reduce(into: [String]()) { result, line in
-                // Skip consecutive empty lines
+                // 跳过连续空行
                 if line.isEmpty && (result.last?.isEmpty ?? true) { return }
                 result.append(line)
             }
@@ -1715,13 +1718,13 @@ private struct SessionCard: View {
     }
 }
 
-// MARK: - Claude Logo (official sunburst from simple-icons, viewBox 0 0 24 24)
+// MARK: - Claude Logo（官方太阳爆发图案，simple-icons，viewBox 0 0 24 24）
 
 private struct ClaudeLogo: View {
     var size: CGFloat = 22
     private static let color = Color(red: 0.85, green: 0.47, blue: 0.34) // #D97757
 
-    // Official Claude logo SVG path (source: simple-icons)
+    // 官方 Claude logo SVG 路径（来源：simple-icons）
     fileprivate static let svgPath = "m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"
 
     var body: some View {
@@ -1834,12 +1837,12 @@ private struct ClaudeLogoShape: Shape {
     }
 }
 
-// MARK: - Notch Panel Shape (inverse radius at top, regular radius at bottom)
+// MARK: - 刘海面板形状（顶部反向圆角，底部常规圆角）
 
 private struct NotchPanelShape: Shape {
     var topExtension: CGFloat
     var bottomRadius: CGFloat
-    /// Fixed minimum height — NOT animated, prevents spring overshoot from exposing the notch
+    /// 固定最小高度——不参与动画，防止弹簧回弹暴露刘海
     var minHeight: CGFloat = 0
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
@@ -1854,39 +1857,39 @@ private struct NotchPanelShape: Shape {
         let ext = topExtension
         let maxY = max(rect.maxY, rect.minY + minHeight)
         let br = min(bottomRadius, rect.width / 4, (maxY - rect.minY) / 2)
-        // Smoothness factor for continuous-curvature corners (superellipse approximation).
-        // 0.5523 = perfect circle; higher values tighten the curve for an Apple squircle feel.
+        // 连续曲率角的平滑因子（超椭圆近似）。
+        // 0.5523 = 完美圆；更高数值收紧曲线，产生 Apple 圆角矩形效果。
         let k: CGFloat = 0.62
 
         var p = Path()
         // Top edge (extends into notch area via wings)
         p.move(to: CGPoint(x: rect.minX - ext, y: rect.minY))
         p.addLine(to: CGPoint(x: rect.maxX + ext, y: rect.minY))
-        // Right shoulder: cubic bezier tangent to top line (horizontal) and right side (vertical)
+        // 右肩：三次贝塞尔曲线，相切于顶边（水平）和右边（垂直）
         p.addCurve(
             to: CGPoint(x: rect.maxX, y: rect.minY + ext),
             control1: CGPoint(x: rect.maxX + ext * 0.35, y: rect.minY),
             control2: CGPoint(x: rect.maxX, y: rect.minY + ext * 0.35)
         )
-        // Right side down to bottom-right corner
+        // 右边向下到右下角
         p.addLine(to: CGPoint(x: rect.maxX, y: maxY - br))
-        // Bottom-right: cubic bezier for continuous-curvature corner
+        // 右下角：连续曲率圆角的三次贝塞尔曲线
         p.addCurve(
             to: CGPoint(x: rect.maxX - br, y: maxY),
             control1: CGPoint(x: rect.maxX, y: maxY - br * (1 - k)),
             control2: CGPoint(x: rect.maxX - br * (1 - k), y: maxY)
         )
-        // Bottom edge
+        // 底边
         p.addLine(to: CGPoint(x: rect.minX + br, y: maxY))
-        // Bottom-left: cubic bezier for continuous-curvature corner
+        // 左下角：连续曲率圆角的三次贝塞尔曲线
         p.addCurve(
             to: CGPoint(x: rect.minX, y: maxY - br),
             control1: CGPoint(x: rect.minX + br * (1 - k), y: maxY),
             control2: CGPoint(x: rect.minX, y: maxY - br * (1 - k))
         )
-        // Left side up to shoulder
+        // 左边向上到肩部
         p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + ext))
-        // Left shoulder: cubic bezier tangent to left side (vertical) and top line (horizontal)
+        // 左肩：三次贝塞尔曲线，相切于左边（垂直）和顶边（水平）
         p.addCurve(
             to: CGPoint(x: rect.minX - ext, y: rect.minY),
             control1: CGPoint(x: rect.minX, y: rect.minY + ext * 0.35),

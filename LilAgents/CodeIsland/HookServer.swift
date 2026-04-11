@@ -15,7 +15,7 @@ class HookServer {
     }
 
     func start() {
-        // Clean up stale socket
+        // 清理残留的旧 socket
         unlink(HookServer.socketPath)
 
         let params = NWParameters()
@@ -60,15 +60,15 @@ class HookServer {
         receiveAll(connection: connection, accumulated: Data())
     }
 
-    private static let maxPayloadSize = 1_048_576  // 1MB safety limit
+    private static let maxPayloadSize = 1_048_576  // 1MB 安全限制
 
-    /// Recursively receive all data until EOF, then process
+    /// 递归接收所有数据直到 EOF，然后处理
     private func receiveAll(connection: NWConnection, accumulated: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] content, _, isComplete, error in
             Task { @MainActor in
                 guard let self = self else { return }
 
-                // On error with no data, just drop the connection
+                // 如果有错误且没有数据，直接断开连接
                 if error != nil && accumulated.isEmpty && content == nil {
                     connection.cancel()
                     return
@@ -77,7 +77,7 @@ class HookServer {
                 var data = accumulated
                 if let content { data.append(content) }
 
-                // Safety: reject oversized payloads
+                // 安全检查：拒绝过大的数据 payload
                 if data.count > Self.maxPayloadSize {
                     log.warning("Payload too large (\(data.count) bytes), dropping connection")
                     connection.cancel()
@@ -93,7 +93,7 @@ class HookServer {
         }
     }
 
-    /// Internal tools that are safe to auto-approve without user confirmation.
+    /// 无需用户确认即可自动批准的安全内部工具列表
     private static let autoApproveTools: Set<String> = [
         "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop",
         "TodoRead", "TodoWrite",
@@ -115,14 +115,21 @@ class HookServer {
         if event.eventName == "PermissionRequest" {
             let sessionId = event.sessionId ?? "default"
 
-            // Auto-approve safe internal tools without showing UI
+            // 自动批准安全的内部工具，不弹 UI
             if let toolName = event.toolName, Self.autoApproveTools.contains(toolName) {
                 let response = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#
                 sendResponse(connection: connection, data: Data(response.utf8))
                 return
             }
 
-            // AskUserQuestion is a question, not a permission — route to QuestionBar
+            // 当用户开启了自动批准模式时，所有工具调用都直接放行
+            if appState.autoApproveAllMode {
+                let response = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#
+                sendResponse(connection: connection, data: Data(response.utf8))
+                return
+            }
+
+            // AskUserQuestion 是一个问题而非权限请求，转发给 QuestionBar 处理
             if event.toolName == "AskUserQuestion" {
                 monitorPeerDisconnect(connection: connection, sessionId: sessionId)
                 Task {
@@ -156,25 +163,24 @@ class HookServer {
         }
     }
 
-    /// Per-connection state used by the disconnect monitor.
-    /// `responded` flips to true once we've sent the response, so our own
-    /// `connection.cancel()` inside `sendResponse` does not masquerade as a
-    /// peer disconnect.
+    /// 每个连接的上下文状态，供断连监控器使用。
+    /// `responded` 在我们发送响应后变为 true，这样 `sendResponse` 内部的
+    /// `connection.cancel()` 就不会被误认为是对方断连。
     private final class ConnectionContext {
         var responded: Bool = false
     }
 
     private var connectionContexts: [ObjectIdentifier: ConnectionContext] = [:]
 
-    /// Watch for bridge process disconnect — indicates the bridge process actually died
-    /// (e.g. user Ctrl-C'd Claude Code), NOT a normal half-close.
+    /// 监控 bridge 进程断连——表示 bridge 进程真的挂了
+    /// （比如用户按了 Ctrl-C），而不是正常的半关闭。
     ///
-    /// Previously this used `connection.receive(min:1, max:1)` which triggered on EOF.
-    /// But the bridge always does `shutdown(SHUT_WR)` after sending the request (see
-    /// CodeIslandBridge/main.swift), which produces an immediate EOF on the read side.
-    /// That caused every PermissionRequest to be auto-drained as `deny` before the UI
-    /// card was even visible. We now rely on `stateUpdateHandler` transitioning to
-    /// `cancelled`/`failed` — which only happens on real socket teardown, not half-close.
+    /// 之前使用 `connection.receive(min:1, max:1)` 会在 EOF 时触发。
+    /// 但 bridge 在发送请求后总是会调用 `shutdown(SHUT_WR)`（见
+    /// CodeIslandBridge/main.swift），这会在读取端立即产生 EOF。
+    /// 这导致每个 PermissionRequest 在 UI 卡片显示之前就被自动标记为 `deny`。
+    /// 现在我们依赖 `stateUpdateHandler` 转为 `cancelled`/`failed`——只有真正的
+    /// socket 关闭才会触发，而非半关闭。
     private func monitorPeerDisconnect(connection: NWConnection, sessionId: String) {
         let context = ConnectionContext()
         connectionContexts[ObjectIdentifier(connection)] = context
@@ -196,7 +202,7 @@ class HookServer {
     }
 
     private func sendResponse(connection: NWConnection, data: Data) {
-        // Mark as responded BEFORE cancel() so the disconnect monitor ignores our own teardown.
+        // 在调用 cancel() 之前标记为已响应，这样断连监控器就不会误判我们自己的关闭操作
         if let context = connectionContexts[ObjectIdentifier(connection)] {
             context.responded = true
         }

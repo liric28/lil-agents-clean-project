@@ -367,6 +367,7 @@ final class L10n: ObservableObject {
         "deny": "拒绝",
         "allow_once": "允许一次",
         "always": "始终允许",
+        "auto_allow": "自动批准",
         "type_answer": "输入回答…",
         "skip": "跳过",
         "submit": "提交",
