@@ -95,8 +95,10 @@ struct NotchPanelView: View {
 
     private func syncCompactBarReveal(animated: Bool) {
         if appState.collapsingAfterDelete {
-            if animated {
-                withAnimation(NotchAnimation.compactReveal) {
+            if appState.surface.isExpanded {
+                compactBarExpanded = true
+            } else if animated {
+                withAnimation(NotchAnimation.deleteCollapse) {
                     compactBarExpanded = false
                 }
             } else {

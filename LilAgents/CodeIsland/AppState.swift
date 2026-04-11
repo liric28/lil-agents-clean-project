@@ -183,14 +183,14 @@ final class AppState {
         scheduleSave()
 
         if sessions.isEmpty {
+            if wasExpanded {
+                withAnimation(NotchAnimation.deleteCollapse) {
+                    surface = .collapsed
+                }
+            }
+
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                try? await Task.sleep(nanoseconds: 220_000_000)
-                if wasExpanded {
-                    withAnimation(NotchAnimation.deleteCollapse) {
-                        self.surface = .collapsed
-                    }
-                }
                 try? await Task.sleep(nanoseconds: 560_000_000)
                 self.collapsingAfterDelete = false
             }
