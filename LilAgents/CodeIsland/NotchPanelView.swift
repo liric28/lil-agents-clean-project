@@ -423,8 +423,11 @@ private struct GroupingModeButtons: View {
         ("cli", "CLI"),
     ]
 
+    /// Button height from vertical padding (4+4=8) + text baseline
+    private let buttonHeight: CGFloat = 20
+
     var body: some View {
-        HStack(spacing: 1) {
+        HStack(spacing: 0) {
             ForEach(options, id: \.tag) { option in
                 let selected = groupingMode == option.tag
                 Button {
@@ -436,16 +439,21 @@ private struct GroupingModeButtons: View {
                         size: 11
                     )
                     .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
+                    .frame(height: buttonHeight)
                     .background(
-                        Rectangle().fill(selected ? .white.opacity(0.1) : .clear)
+                        Capsule().fill(selected ? Color.white.opacity(0.1) : Color.clear)
                     )
                 }
                 .buttonStyle(.plain)
             }
         }
-        .background(Rectangle().fill(.white.opacity(0.05)))
-        .overlay(Rectangle().stroke(.white.opacity(0.1), lineWidth: 1))
+        .frame(height: buttonHeight)
+        .background(
+            Capsule().fill(Color.white.opacity(0.05))
+        )
+        .overlay(
+            Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 }
 
