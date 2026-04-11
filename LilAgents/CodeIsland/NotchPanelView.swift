@@ -564,7 +564,7 @@ private struct CompactRightWing: View {
                     }
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 } else {
-                    // Simple mode: original session count only
+                    // 最右边数字任务
                     HStack(spacing: 1) {
                         let active = appState.activeSessionCount
                         let total = appState.totalSessionCount
@@ -581,7 +581,7 @@ private struct CompactRightWing: View {
                 }
             }
         }
-        .padding(.trailing, 6)
+        .padding(.trailing, 12) // 最右边数字
     }
 }
 
