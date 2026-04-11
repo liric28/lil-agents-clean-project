@@ -18,7 +18,7 @@ struct NotchPanelView: View {
     @State private var idleHovered = false
     @State private var displayedToolStatus: Bool = SettingsDefaults.showToolStatus
 
-    private var isActive: Bool { !appState.sessions.isEmpty }
+    private var isActive: Bool { !appState.sessions.isEmpty || appState.collapsingAfterDelete }
     /// First launch / no-session state should still render a visible marker so the app
     /// doesn't disappear completely behind the physical notch.
     private var showIdleIndicator: Bool {
@@ -26,7 +26,8 @@ struct NotchPanelView: View {
     }
     /// Whether the bar content should be visible (respects hideWhenNoSession)
     private var showBar: Bool {
-        isActive && !(hideWhenNoSession && appState.totalSessionCount == 0)
+        if appState.collapsingAfterDelete { return true }
+        return isActive && !(hideWhenNoSession && appState.totalSessionCount == 0)
     }
     private var shouldShowExpanded: Bool {
         showBar && appState.surface.isExpanded
@@ -1267,10 +1268,15 @@ private struct SessionListView: View {
                 ForEach(group.ids, id: \.self) { sessionId in
                     if let session = appState.sessions[sessionId] {
                         SessionCard(
+                            appState: appState,
                             sessionId: sessionId,
                             session: session,
                             isCompletion: onlySessionId != nil
                         )
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.94, anchor: .top)).combined(with: .move(edge: .top))
+                        ))
                     }
                 }
             }
@@ -1286,6 +1292,7 @@ private struct SessionListView: View {
             }
         }
         .padding(.vertical, 4)
+        .animation(NotchAnimation.deleteCollapse, value: totalSessionCount)
 
         if needsScroll {
             ThinScrollView(maxHeight: CGFloat(maxVisibleSessions) * 90) {
@@ -1460,6 +1467,7 @@ private struct SessionsExpandLink: View {
 }
 
 private struct SessionCard: View {
+    var appState: AppState
     let sessionId: String
     let session: SessionSnapshot
     var isCompletion: Bool = false
@@ -1485,7 +1493,7 @@ private struct SessionCard: View {
             // Column 1: Character + subagent icons
             VStack(spacing: 3) {
 //                MascotView(source: "claude", status: .idle, size: 32)
-                MascotView(source: session.source, status: session.status, size: 32)
+                MascotView(source: session.source, status: session.status, size: 24)
                 if showAgentDetails && !session.subagents.isEmpty {
                     let sorted = session.subagents.values.sorted { $0.startTime < $1.startTime }
                     // Grid: 4 per row, 8px icons
@@ -1530,6 +1538,12 @@ private struct SessionCard: View {
                         }
                         SessionTag(timeAgo(session.startTime))
                         TerminalJumpButton(session: session, sessionId: sessionId)
+                        SessionClearButton {
+                            appState.clearSessionTask(sessionId)
+                        }
+                        .opacity(hovering ? 1 : 0)
+                        .scaleEffect(hovering ? 1 : 0.9)
+                        .allowsHitTesting(hovering)
                     }
                 }
 
@@ -1827,6 +1841,31 @@ private struct NotchPanelShape: Shape {
 }
 
 /// Collapsed single-line row for idle sessions >15 min
+private struct SessionClearButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    private let red = Color(red: 1.0, green: 0.35, blue: 0.35)
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "trash")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(red.opacity(hovering ? 1.0 : 0.8))
+                .frame(width: 22, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(red.opacity(hovering ? 0.18 : 0.08))
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Clear this row")
+        .onHover { h in
+            withAnimation(.easeOut(duration: 0.15)) { hovering = h }
+        }
+    }
+}
+
 private struct TerminalJumpButton: View {
     let session: SessionSnapshot
     let sessionId: String

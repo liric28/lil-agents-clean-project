@@ -55,6 +55,29 @@ private struct GhostPixelMascotView: View {
     var size: CGFloat = 27
     @Environment(\.mascotSpeed) private var speed
 
+    private struct CursorPixel {
+        let x: CGFloat
+        let y: CGFloat
+        let color: Color
+    }
+
+    private let svgCursorPixels: [CursorPixel] = [
+        .init(x: 54, y: 0, color: Color(red: 1.0, green: 0.0, blue: 122.0 / 255.0)),
+        .init(x: 72, y: 0, color: Color(red: 1.0, green: 0.0, blue: 122.0 / 255.0)),
+        .init(x: 54, y: 18, color: Color(red: 1.0, green: 27.0 / 255.0, blue: 87.0 / 255.0)),
+        .init(x: 72, y: 18, color: Color(red: 1.0, green: 27.0 / 255.0, blue: 87.0 / 255.0)),
+        .init(x: 54, y: 36, color: Color(red: 1.0, green: 55.0 / 255.0, blue: 52.0 / 255.0)),
+        .init(x: 72, y: 36, color: Color(red: 1.0, green: 55.0 / 255.0, blue: 52.0 / 255.0)),
+        .init(x: 54, y: 54, color: Color(red: 1.0, green: 82.0 / 255.0, blue: 17.0 / 255.0)),
+        .init(x: 72, y: 54, color: Color(red: 1.0, green: 82.0 / 255.0, blue: 17.0 / 255.0)),
+        .init(x: 54, y: 72, color: Color(red: 1.0, green: 113.0 / 255.0, blue: 0.0)),
+        .init(x: 72, y: 72, color: Color(red: 1.0, green: 113.0 / 255.0, blue: 0.0)),
+        .init(x: 54, y: 108, color: Color(red: 1.0, green: 180.0 / 255.0, blue: 0.0)),
+        .init(x: 72, y: 108, color: Color(red: 1.0, green: 180.0 / 255.0, blue: 0.0)),
+        .init(x: 54, y: 126, color: Color(red: 1.0, green: 214.0 / 255.0, blue: 0.0)),
+        .init(x: 72, y: 126, color: Color(red: 1.0, green: 214.0 / 255.0, blue: 0.0)),
+    ]
+
     // pixet fun-ghost matrix
     private let openMatrix: [[Int]] = [
         [0,0,1,1,1,1,0,0],
@@ -92,7 +115,7 @@ private struct GhostPixelMascotView: View {
     }
 
     private func isCursorVisible(_ t: Double) -> Bool {
-        let cycle = max(0.42, 0.84 / max(speed, 0.5))
+        let cycle = max(0.42, 1.24 / max(speed, 0.5))
         return t.truncatingRemainder(dividingBy: cycle) < cycle * 0.48
     }
 
@@ -108,8 +131,10 @@ private struct GhostPixelMascotView: View {
             let ghostWidth = CGFloat(matrix[0].count) * pixel
             let ghostHeight = CGFloat(matrix.count) * pixel
             let cursorHeight = pixel * 5
+            let cursorSize = cursorHeight
+            let cursorSpacing = pixel + 1
 
-            HStack(alignment: .center, spacing: 4) {
+            HStack(alignment: .center, spacing: cursorSpacing) {
                 Canvas { context, canvasSize in
                     let ox = (canvasSize.width - ghostWidth) / 2
                     let oy = (canvasSize.height - ghostHeight) / 2
@@ -132,13 +157,31 @@ private struct GhostPixelMascotView: View {
                 .shadow(color: colors[1].opacity(0.28), radius: 12)
 
                 // 光标闪动
-                Rectangle()
-                    .fill(colors[0])
-                    .frame(width: 4, height: 10)
-                    .shadow(color: colors[0].opacity(0.60), radius: 6)
+                Canvas { context, canvasSize in
+                    let scale = min(canvasSize.width / 142, canvasSize.height / 142)*1.1
+                    let rectSize = 16 * scale
+                    let cornerRadius = 2 * scale
+                    let ox = (canvasSize.width - 142 * scale) / 2
+                    let oy = (canvasSize.height - 142 * scale) / 2
+
+                    for pixel in svgCursorPixels {
+                        let rect = CGRect(
+                            x: ox + pixel.x * scale,
+                            y: oy + pixel.y * scale,
+                            width: rectSize,
+                            height: rectSize
+                        )
+                        context.fill(
+                            Path(roundedRect: rect, cornerRadius: cornerRadius),
+                            with: .color(pixel.color)
+                        )
+                    }
+                }
+                .frame(width: cursorSize*1.2, height: cursorSize*1.2)
+                    .shadow(color: Color(red: 1.0, green: 82.0 / 255.0, blue: 17.0 / 255.0).opacity(0.35), radius: 6)
                     .opacity(cursorVisible ? 1 : 0)
             }
-            .frame(width: ghostWidth + pixel + 4, height: max(ghostHeight, cursorHeight))
+            .frame(width: ghostWidth + cursorSpacing + cursorSize, height: max(ghostHeight, cursorSize))
             .offset(x: 6)  // 整体向右偏移6点
         }
         .onAppear {

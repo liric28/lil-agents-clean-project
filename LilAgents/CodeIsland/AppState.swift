@@ -19,6 +19,7 @@ final class AppState {
     /// Preview-only: mock question payload for DebugHarness (no continuation needed)
     var previewQuestionPayload: QuestionPayload?
     var surface: IslandSurface = .collapsed
+    var collapsingAfterDelete = false
 
     var justCompletedSessionId: String? {
         if case .completionCard(let id) = surface { return id }
@@ -164,6 +165,36 @@ final class AppState {
         }
         startRotationIfNeeded()
         refreshDerivedState()
+    }
+
+    func clearSessionTask(_ sessionId: String) {
+        guard sessions[sessionId] != nil else { return }
+
+        let wasExpanded = surface.isExpanded
+        let wasLastSession = sessions.count == 1
+
+        if wasExpanded && wasLastSession {
+            collapsingAfterDelete = true
+        }
+
+        withAnimation(NotchAnimation.deleteCollapse) {
+            removeSession(sessionId)
+        }
+        scheduleSave()
+
+        if sessions.isEmpty, wasExpanded {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: 220_000_000)
+                withAnimation(NotchAnimation.deleteCollapse) {
+                    self.surface = .collapsed
+                }
+                try? await Task.sleep(nanoseconds: 560_000_000)
+                self.collapsingAfterDelete = false
+            }
+        } else {
+            collapsingAfterDelete = false
+        }
     }
 
     // MARK: - Compact bar mascot rotation

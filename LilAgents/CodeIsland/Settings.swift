@@ -92,7 +92,7 @@ struct SettingsDefaults {
 
     static let mascotSpeed = 100  // percentage: 0–300, 0 = silent
 
-    static let sessionGroupingMode = "all"
+    static let sessionGroupingMode = "cli"
 
     static let showToolStatus = true
 }
