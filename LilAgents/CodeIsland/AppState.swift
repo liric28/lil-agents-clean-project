@@ -173,7 +173,7 @@ final class AppState {
         let wasExpanded = surface.isExpanded
         let wasLastSession = sessions.count == 1
 
-        if wasExpanded && wasLastSession {
+        if wasLastSession {
             collapsingAfterDelete = true
         }
 
@@ -182,12 +182,14 @@ final class AppState {
         }
         scheduleSave()
 
-        if sessions.isEmpty, wasExpanded {
+        if sessions.isEmpty {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 try? await Task.sleep(nanoseconds: 220_000_000)
-                withAnimation(NotchAnimation.deleteCollapse) {
-                    self.surface = .collapsed
+                if wasExpanded {
+                    withAnimation(NotchAnimation.deleteCollapse) {
+                        self.surface = .collapsed
+                    }
                 }
                 try? await Task.sleep(nanoseconds: 560_000_000)
                 self.collapsingAfterDelete = false

@@ -17,6 +17,7 @@ struct NotchPanelView: View {
     @State private var hoverTimer: Timer?
     @State private var idleHovered = false
     @State private var displayedToolStatus: Bool = SettingsDefaults.showToolStatus
+    @State private var compactBarExpanded = false
 
     private var isActive: Bool { !appState.sessions.isEmpty || appState.collapsingAfterDelete }
     /// First launch / no-session state should still render a visible marker so the app
@@ -37,7 +38,8 @@ struct NotchPanelView: View {
     private var mascotSize: CGFloat { min(16, notchHeight - 6) }
 
     /// Minimum wing width needed to display compact bar content
-    private var compactWingWidth: CGFloat { mascotSize + 14 }
+    /// Ghost mascot includes a terminal cursor to the right, so it needs more than a square box.
+    private var compactWingWidth: CGFloat { max(mascotSize + 14, mascotSize * 1.9) }
 
     /// 用户指定：收起态刘海长度固定 142pt，并做成纯黑硬件刘海感。
     private let collapsedNotchWidth: CGFloat = 142
@@ -75,12 +77,51 @@ struct NotchPanelView: View {
         if showIdleIndicator { return idleHovered ? collapsedNotchWidth + 40 : collapsedNotchWidth }
         if !isActive { return 0 }
         if shouldShowExpanded { return min(expandedNotchWidth, screenWidth - 40) }
-        if hasNotch { return collapsedNotchWidth }
-        let wing = compactWingWidth
-        let extra: CGFloat = appState.status == .idle ? 0 : 20
-        // Reserve space for tool status — proportional to screen width
-        let toolExtra: CGFloat = displayedToolStatus ? (hasNotch ? screenWidth * 0.03 : screenWidth * 0.04) : 0
-        return notchW + wing * 2 + extra + toolExtra  - 100
+
+        let compactTargetWidth: CGFloat = {
+            if hasNotch { return collapsedNotchWidth }
+            let wing = compactWingWidth
+            let extra: CGFloat = appState.status == .idle ? 0 : 20
+            let toolExtra: CGFloat = displayedToolStatus ? (hasNotch ? screenWidth * 0.03 : screenWidth * 0.04) : 0
+            return notchW + wing * 2 + extra + toolExtra - 100
+        }()
+
+        if compactBarExpanded {
+            return compactTargetWidth
+        }
+
+        return min(compactTargetWidth, collapsedNotchWidth)
+    }
+
+    private func syncCompactBarReveal(animated: Bool) {
+        if appState.collapsingAfterDelete {
+            if animated {
+                withAnimation(NotchAnimation.compactReveal) {
+                    compactBarExpanded = false
+                }
+            } else {
+                compactBarExpanded = false
+            }
+            return
+        }
+
+        let shouldExpandCompactBar = showBar && !shouldShowExpanded
+        if !shouldExpandCompactBar {
+            compactBarExpanded = false
+            return
+        }
+
+        if !animated {
+            compactBarExpanded = true
+            return
+        }
+
+        compactBarExpanded = false
+        DispatchQueue.main.async {
+            withAnimation(NotchAnimation.compactReveal) {
+                compactBarExpanded = true
+            }
+        }
     }
 
     var body: some View {
@@ -179,6 +220,11 @@ struct NotchPanelView: View {
             }
             .frame(width: panelWidth)
             .clipped()
+            .onAppear { syncCompactBarReveal(animated: false) }
+            .onChange(of: showBar) { _, _ in syncCompactBarReveal(animated: true) }
+            .onChange(of: shouldShowExpanded) { _, _ in syncCompactBarReveal(animated: true) }
+            .onChange(of: appState.totalSessionCount) { _, _ in syncCompactBarReveal(animated: true) }
+            .onChange(of: appState.collapsingAfterDelete) { _, _ in syncCompactBarReveal(animated: true) }
             .background(
                 ZStack {
                     NotchPanelShape(
@@ -311,6 +357,8 @@ private struct CompactLeftWing: View {
     @State private var shownTool: String?
     @State private var lingerTimer: Timer?
 
+    private var compactMascotWidth: CGFloat { max(mascotSize * 1.9, mascotSize + 14) }
+
     var body: some View {
         HStack(spacing: 6) {
             if expanded {
@@ -343,11 +391,12 @@ private struct CompactLeftWing: View {
 //                    .overlay(Rectangle().stroke(.white.opacity(0.1), lineWidth: 1))
                 }
             } else {
-//                MascotView(source: "claude", status: .idle, size: mascotSize)
                 MascotView(source: displaySource, status: displayStatus, size: mascotSize)
+                    .frame(width: compactMascotWidth, height: mascotSize, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
                     .id(displaySource)
-                    .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.3), value: displaySource)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .leading)))
+                    .animation(NotchAnimation.compactReveal, value: displaySource)
 
                 // On notch screens, show tool name only (no description, space is tight)
                 if hasNotch, showToolStatus, let tool = shownTool {
@@ -361,7 +410,6 @@ private struct CompactLeftWing: View {
             }
         }
         .padding(.leading, 6)
-        .clipped()
         .onChange(of: liveTool) { _, newTool in
             lingerTimer?.invalidate()
             if let newTool {
@@ -406,9 +454,11 @@ private struct CompactNotchSessionTitle: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, 8)
+                    .transition(.opacity)
             }
         }
         .frame(width: notchWidth)
+        .animation(.easeInOut(duration: 0.2), value: displayTitle)
     }
 }
 
@@ -600,6 +650,11 @@ private struct CompactToolStatus: View {
         HStack(spacing: 5) {
             // Latest prompt — always show when available
             if let prompt = latestPrompt {
+                Text(shortPrompt(prompt))
+                    .foregroundStyle(.white)
+                    .id("prompt-\(displaySessionId ?? "")")
+                    .transition(.opacity)
+            } else if let prompt = projectName {
                 Text(shortPrompt(prompt))
                     .foregroundStyle(.white)
                     .id("prompt-\(displaySessionId ?? "")")

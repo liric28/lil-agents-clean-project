@@ -132,6 +132,7 @@ private struct GhostPixelMascotView: View {
             let ghostHeight = CGFloat(matrix.count) * pixel
             let cursorHeight = pixel * 5
             let cursorSize = cursorHeight
+            let cursorViewSize = cursorSize * 1.2
             let cursorSpacing = pixel + 1
 
             HStack(alignment: .center, spacing: cursorSpacing) {
@@ -177,11 +178,11 @@ private struct GhostPixelMascotView: View {
                         )
                     }
                 }
-                .frame(width: cursorSize*1.2, height: cursorSize*1.2)
+                .frame(width: cursorViewSize, height: cursorViewSize)
                     .shadow(color: Color(red: 1.0, green: 82.0 / 255.0, blue: 17.0 / 255.0).opacity(0.35), radius: 6)
                     .opacity(cursorVisible ? 1 : 0)
             }
-            .frame(width: ghostWidth + cursorSpacing + cursorSize, height: max(ghostHeight, cursorSize))
+            .frame(width: ghostWidth + cursorSpacing + cursorViewSize, height: max(ghostHeight, cursorViewSize))
             .offset(x: 6)  // 整体向右偏移6点
         }
         .onAppear {
