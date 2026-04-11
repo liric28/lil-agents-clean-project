@@ -54,6 +54,8 @@ enum SettingsKey {
 
     // Mascot
     static let mascotSpeed = "mascotSpeed"
+    static let cachedVisibleMascots = "cachedVisibleMascots"  // [String] - 缓存已启用的人偶来源列表，用于下次启动恢复
+    static let cachedVisibleCharacters = "cachedVisibleCharacters"  // [Bool] - 缓存人偶可见状态 [Bruce可见, Jazz可见]
 
     // Session grouping
     static let sessionGroupingMode = "sessionGroupingMode"

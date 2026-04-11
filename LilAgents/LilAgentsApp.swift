@@ -16,6 +16,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
+    // 保存菜单项引用，用于根据缓存更新勾选状态
+    var char1MenuItem: NSMenuItem?
+    var char2MenuItem: NSMenuItem?
+
     // CodeIsland integration
     private let codeIslandDelegate = CodeIslandAppDelegate.shared
 
@@ -24,6 +28,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         controller = LilAgentsController()
         controller?.start()
         setupMenuBar()
+        // 根据缓存恢复菜单项勾选状态
+        updateCharMenuItemStates()
 
         // Start CodeIsland HookServer and panel
         codeIslandDelegate.startCodeIsland()
@@ -46,10 +52,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let char1Item = NSMenuItem(title: "Bruce", action: #selector(toggleChar1), keyEquivalent: "1")
         char1Item.state = .on
         menu.addItem(char1Item)
+        char1MenuItem = char1Item  // 保存引用
 
         let char2Item = NSMenuItem(title: "Jazz", action: #selector(toggleChar2), keyEquivalent: "2")
         char2Item.state = .on
         menu.addItem(char2Item)
+        char2MenuItem = char2Item  // 保存引用
 
         menu.addItem(NSMenuItem.separator())
 
@@ -233,6 +241,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             char.setManuallyVisible(true)
             sender.state = .on
         }
+        // 更新可见人偶缓存
+        updateVisibleCharactersCache()
     }
 
     @objc func toggleChar2(_ sender: NSMenuItem) {
@@ -244,6 +254,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             char.setManuallyVisible(true)
             sender.state = .on
+        }
+        // 更新可见人偶缓存
+        updateVisibleCharactersCache()
+    }
+
+    /// 更新可见人偶缓存到 UserDefaults
+    private func updateVisibleCharactersCache() {
+        guard let chars = controller?.characters else { return }
+        let visible = chars.map { $0.isManuallyVisible }
+        UserDefaults.standard.set(visible, forKey: SettingsKey.cachedVisibleCharacters)
+    }
+
+    /// 根据缓存的人偶可见性状态更新菜单栏勾选状态
+    private func updateCharMenuItemStates() {
+        guard let chars = controller?.characters else { return }
+        // 检查是否有缓存
+        guard UserDefaults.standard.object(forKey: SettingsKey.cachedVisibleCharacters) != nil else { return }
+
+        if let cached = UserDefaults.standard.array(forKey: SettingsKey.cachedVisibleCharacters) as? [Bool] {
+            // 更新 Bruce 的勾选状态
+            if cached.count > 0 {
+                char1MenuItem?.state = cached[0] ? .on : .off
+            }
+            // 更新 Jazz 的勾选状态
+            if cached.count > 1 {
+                char2MenuItem?.state = cached[1] ? .on : .off
+            }
         }
     }
 

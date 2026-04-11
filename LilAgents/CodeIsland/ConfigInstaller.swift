@@ -308,12 +308,20 @@ struct ConfigInstaller {
         return UserDefaults.standard.bool(forKey: key)
     }
 
-    /// Toggle a single CLI on/off: installs or uninstalls its hooks.
+    /// 切换单个 CLI 的启用/禁用状态，同时安装或卸载对应的钩子
+    /// - Parameters:
+    ///   - source: CLI 来源标识（如 "claude", "codex", "cursor" 等）
+    ///   - enabled: true = 启用（安装钩子），false = 禁用（卸载钩子）
+    /// - Returns: 操作是否成功
     @discardableResult
     static func setEnabled(source: String, enabled: Bool) -> Bool {
+        // 将启用状态保存到 UserDefaults
         UserDefaults.standard.set(enabled, forKey: "cli_enabled_\(source)")
+        // 同时更新人偶缓存，以便下次启动恢复
+        updateCachedVisibleMascots(source: source, enabled: enabled)
         let fm = FileManager.default
         if enabled {
+            // 启用：安装钩子脚本和桥接二进制文件
             installHookScript(fm: fm)
             installBridgeBinary(fm: fm)
             if source == "opencode" {
@@ -323,11 +331,14 @@ struct ConfigInstaller {
             if cli.source == "claude" {
                 return installClaudeHooks(cli: cli, fm: fm)
             } else {
+                // 其他 CLI（Codex、Gemini、Cursor 等）：安装外部钩子
                 installExternalHooks(cli: cli, fm: fm)
+                // Codex 需要额外在 config.toml 中启用 hooks
                 if cli.source == "codex" { enableCodexHooksConfig(fm: fm) }
                 return isHooksInstalled(for: cli, fm: fm)
             }
         } else {
+            // 禁用：卸载对应的钩子
             if source == "opencode" {
                 uninstallOpencodePlugin(fm: fm)
             } else if let cli = allCLIs.first(where: { $0.source == source }) {
@@ -335,6 +346,39 @@ struct ConfigInstaller {
             }
             return true
         }
+    }
+
+    // MARK: - 缓存人偶可见性
+
+    /// 当用户切换人偶启用状态时，更新人偶缓存
+    /// - Parameters:
+    ///   - source: 人偶来源标识（如 "claude", "codex" 等）
+    ///   - enabled: 是否启用该人偶
+    private static func updateCachedVisibleMascots(source: String, enabled: Bool) {
+        // 获取当前缓存列表
+        var cached = getCachedVisibleMascots()
+        if enabled {
+            // 启用：将该来源添加到缓存列表（如果不在列表中）
+            if !cached.contains(source) {
+                cached.append(source)
+            }
+        } else {
+            // 禁用：从缓存列表中移除该来源
+            cached.removeAll { $0 == source }
+        }
+        // 保存更新后的缓存到 UserDefaults
+        UserDefaults.standard.set(cached, forKey: SettingsKey.cachedVisibleMascots)
+    }
+
+    /// 获取缓存的人偶来源列表
+    /// - Returns: 已启用的人偶来源字符串数组
+    static func getCachedVisibleMascots() -> [String] {
+        UserDefaults.standard.stringArray(forKey: SettingsKey.cachedVisibleMascots) ?? []
+    }
+
+    /// 检查是否存在缓存的人偶配置（用户是否曾经设置过人偶偏好）
+    static var hasCachedVisibleMascots: Bool {
+        UserDefaults.standard.object(forKey: SettingsKey.cachedVisibleMascots) != nil
     }
 
     /// Check all installed CLIs and repair missing hooks. Returns names of repaired CLIs.

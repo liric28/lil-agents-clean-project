@@ -12,13 +12,24 @@ class LilAgentsController {
         let char1 = WalkerCharacter(videoName: "walk-bruce-01", name: "Bruce")
         let char2 = WalkerCharacter(videoName: "walk-jazz-01", name: "Jazz")
 
-        // Detect available providers, then set first-run defaults
+        // 检测可用的 AI 提供者，然后设置首次运行默认值或从缓存恢复
         AgentProvider.detectAvailableProviders { [weak char1, weak char2] in
             guard let char1 = char1, let char2 = char2 else { return }
             if !UserDefaults.standard.bool(forKey: Self.onboardingKey) {
+                // 首次运行：使用第一个可用的 AI 提供者
                 let first = AgentProvider.firstAvailable
                 char1.provider = first
                 char2.provider = first
+            } else if ConfigInstaller.hasCachedVisibleMascots {
+                // 后续启动：从缓存的人偶配置恢复显示偏好
+                let cached = ConfigInstaller.getCachedVisibleMascots()
+                let available = AgentProvider.allCases.filter { $0.isAvailable }
+                // 第一个角色使用缓存中的第一个人偶（如果可用）
+                let char1Source = cached.first.flatMap { source in available.first { $0.rawValue == source } } ?? AgentProvider.firstAvailable
+                // 第二个角色使用缓存中的第二个人偶（如果可用）
+                let char2Source = cached.dropFirst().first.flatMap { source in available.first { $0.rawValue == source } } ?? char1Source
+                char1.provider = char1Source
+                char2.provider = char2Source
             }
         }
 
@@ -53,6 +64,9 @@ class LilAgentsController {
         characters = [char1, char2]
         characters.forEach { $0.controller = self }
 
+        // 从缓存恢复人偶可见性（首次运行后）
+        restoreVisibleCharactersFromCache()
+
         setupDebugLine()
         startDisplayLink()
 
@@ -77,6 +91,26 @@ class LilAgentsController {
     func completeOnboarding() {
         UserDefaults.standard.set(true, forKey: Self.onboardingKey)
         characters.forEach { $0.isOnboarding = false }
+    }
+
+    // MARK: - 人偶可见性缓存恢复
+
+    /// 从 UserDefaults 缓存中恢复人偶的可见性状态
+    /// 仅在首次运行后生效（onboarding 已完成）
+    private func restoreVisibleCharactersFromCache() {
+        // 只有在首次运行完成后才恢复缓存
+        guard UserDefaults.standard.bool(forKey: Self.onboardingKey) else { return }
+
+        // 检查是否存在缓存
+        guard UserDefaults.standard.object(forKey: SettingsKey.cachedVisibleCharacters) != nil else { return }
+
+        // 从缓存恢复可见性
+        if let cached = UserDefaults.standard.array(forKey: SettingsKey.cachedVisibleCharacters) as? [Bool] {
+            for (index, visible) in cached.enumerated() {
+                guard index < characters.count else { break }
+                characters[index].setManuallyVisible(visible)
+            }
+        }
     }
 
     // MARK: - Debug
